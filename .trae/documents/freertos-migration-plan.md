@@ -137,4 +137,72 @@ void uiTask(void*) {
 - 定义 `SemaphoreHandle_t dataMutex = NULL;`
 - 定义 `volatile bool networkBusy = false;`
 - 定义 `volatile bool weatherUpdated = false;`
-- 在 `initNTP()` 和所有的 `fetch*()` 函数的写入路径上增加
+- 在 `initNTP()` 和所有的 `fetch*()` 函数的写入路径上增加 `xSemaphoreTake/Give` 包裹
+- 修改 `initWiFi()` 使其支持在 networkTask 中被调用时不阻塞 UI
+
+### 4. [`ui.cpp`](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/ui.cpp) — 不改
+
+UI 绘制函数本身不需要改动。`drawClockSection()` 中读取 `state.timeSynced` 的方式保持不变。所有 UI 函数仅在 uiTask 中调用，天然单线程。
+
+`drawSystemInfo()` 中读取所有共享数据（weather/hourly/state）时，由 uiTask 在调用前通过 mutex 保护。
+
+## 数据保护策略
+
+| 数据 | 写入者 | 读取者 | 保护方式 |
+|------|--------|--------|----------|
+| `weather` (struct) | networkTask | uiTask | `dataMutex` |
+| `hourly` (struct) | networkTask | uiTask | `dataMutex` |
+| `state.timeSynced/ntpTried` | networkTask | uiTask | `dataMutex` |
+| `state.wifiConnected` | networkTask | uiTask | `dataMutex` |
+| `networkBusy` | networkTask | uiTask | `volatile bool`（单字节原子） |
+| `weatherUpdated` | networkTask | uiTask | `volatile bool`（单字节原子） |
+| `timeClient`（NTPClient*） | networkTask | uiTask | 写入后在 `timeSynced=true` 时才可读取，由该 flag + mutex 保护 |
+
+## 启动流程
+
+```
+上电 → setup()
+        ├─ initDisplay()          ← 1. SPI/屏幕初始化
+        ├─ pinMode(BTN)           ← 2. 按钮
+        ├─ xTaskCreate(networkTask, core 0)  ← 3. 网络任务
+        └─ xTaskCreate(uiTask, core 1)       ← 4. UI 任务
+     → vTaskDelete(NULL)          ← 删除 setup/loop 任务
+
+networkTask → 异步启动 WiFi → NTP → 天气...
+uiTask      → 实时显示 ["Starting..." / "WiFi..." / 时钟 / 天气]
+```
+
+## 缓存 / 保留
+
+注意：以下与当前实现不同，因采用了不同的处理方法
+
+- `WiFi.onEvent()` 回调也可用于保活，但本方案保持原有 polling 方式，不引入新事件模型
+- 任务间不引入 xQueue/xEventGroup，仅使用 volatile flags + 单 mutex，保持极简
+
+## 实施步骤（共 3 步）
+
+### Step 1: 修改 weather.h — 添加 FreeRTOS 共享声明
+添加 `SemaphoreHandle_t dataMutex`, `volatile networkBusy`, `volatile weatherUpdated` 的 extern 声明。
+
+### Step 2: 修改 weather.cpp — 添加 mutex 保护 + volatile 标志
+- 定义上述 3 个变量
+- 在 `initNTP()`, `fetchWeather()`, `fetchDaily()`, `fetchHourly()` 的写入路径加 `xSemaphoreTake/Give`
+- `initWiFi()` 改为可被 task 调用（添加 `WiFi.mode(WIFI_STA)` 等初始化）
+
+### Step 3: 重写 main.cpp — FreeRTOS 任务入口
+- 新增 `networkTask()`, `uiTask()`
+- `setup()` 精简
+- `loop()` 删除
+
+## 验证标准
+
+- [ ] `pio run` 编译通过，无错误
+- [ ] RAM ≤ 18%, Flash ≤ 80%
+- [ ] 上电后 100ms 内屏幕亮起（不再等待 WiFi）
+- [ ] WiFi 连接过程中时钟走秒正常
+- [ ] 天气获取期间加载动画正常旋转（不卡顿）
+- [ ] 时钟每秒刷新不抖动
+- [ ] 按钮切换系统信息页功能正常
+- [ ] 系统信息页数据实时更新
+- [ ] NTP 失败后每 30s 自动重试
+- [ ] 天气 30 分钟自动刷新
