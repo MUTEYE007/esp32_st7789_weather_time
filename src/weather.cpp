@@ -10,18 +10,14 @@ HourlyData hourly;
 AppState state;
 WiFiUDP ntpUDP;
 NTPClient *timeClient = nullptr;
+SemaphoreHandle_t dataMutex = NULL;
+volatile bool networkBusy = false;
+volatile bool weatherUpdated = false;
 
 void initWiFi() {
   WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   WiFi.setAutoReconnect(true);
-
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 60) {
-    delay(300);
-    attempts++;
-  }
-  state.wifiConnected = (WiFi.status() == WL_CONNECTED);
 }
 
 void initNTP() {
@@ -36,7 +32,10 @@ void initNTP() {
     "pool.ntp.org"
   };
 
-  state.timeSynced = false;
+  if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+    state.timeSynced = false;
+    xSemaphoreGive(dataMutex);
+  }
   for (int s = 0; s < (int)(sizeof(servers)/sizeof(servers[0])) && !state.timeSynced; s++) {
     IPAddress ip;
     if (!WiFi.hostByName(servers[s], ip)) continue;
@@ -51,17 +50,23 @@ void initNTP() {
 
     for (int i = 0; i < 3 && !state.timeSynced; i++) {
       if (timeClient->forceUpdate()) {
-        state.timeSynced = true;
-        strcpy(state.ntpServer, servers[s]);
+        if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+          state.timeSynced = true;
+          strcpy(state.ntpServer, servers[s]);
+          xSemaphoreGive(dataMutex);
+        }
         break;
       }
       delay(200);
     }
   }
 
-  if (!state.timeSynced) strcpy(state.ntpFailReason, "all servers failed");
-  state.ntpTried = true;
-  state.lastNtpAttempt = millis();
+  if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+    if (!state.timeSynced) strcpy(state.ntpFailReason, "all servers failed");
+    state.ntpTried = true;
+    state.lastNtpAttempt = millis();
+    xSemaphoreGive(dataMutex);
+  }
 }
 
 static String urlEncode(String str) {
@@ -199,16 +204,19 @@ bool fetchWeather() {
   JsonObject now = doc["now"];
   if (now.isNull()) return false;
 
-  weather.temp        = now["temp"].as<String>();
-  weather.feelsLike   = now["feelsLike"].as<String>();
-  weather.humidity    = now["humidity"].as<String>();
-  weather.windDir     = now["windDir"].as<String>();
-  weather.windScale   = now["windScale"].as<String>();
-  weather.weatherText = now["text"].as<String>();
-  weather.weatherIcon = now["icon"].as<String>();
-  weather.updateTime  = doc["updateTime"].as<String>();
-  weather.valid       = true;
-  state.weatherLoaded = true;
+  if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+    weather.temp        = now["temp"].as<String>();
+    weather.feelsLike   = now["feelsLike"].as<String>();
+    weather.humidity    = now["humidity"].as<String>();
+    weather.windDir     = now["windDir"].as<String>();
+    weather.windScale   = now["windScale"].as<String>();
+    weather.weatherText = now["text"].as<String>();
+    weather.weatherIcon = now["icon"].as<String>();
+    weather.updateTime  = doc["updateTime"].as<String>();
+    weather.valid       = true;
+    state.weatherLoaded = true;
+    xSemaphoreGive(dataMutex);
+  }
   return true;
 }
 
@@ -228,16 +236,19 @@ void fetchHourly() {
   JsonArray arr = doc["hourly"].as<JsonArray>();
   int count = min((int)arr.size(), HOUR_COUNT);
 
-  for (int i = 0; i < count; i++) {
-    JsonObject h = arr[i];
-    String ft = h["fxTime"].as<String>();
-    if (ft.length() >= 16) hourly.hourLabel[i] = ft.substring(11, 13) + "h";
-    else hourly.hourLabel[i] = "--";
-    hourly.temp[i] = h["temp"].as<String>();
-    hourly.icon[i] = h["icon"].as<String>();
-    hourly.tempInt[i] = hourly.temp[i].toInt();
+  if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+    for (int i = 0; i < count; i++) {
+      JsonObject h = arr[i];
+      String ft = h["fxTime"].as<String>();
+      if (ft.length() >= 16) hourly.hourLabel[i] = ft.substring(11, 13) + "h";
+      else hourly.hourLabel[i] = "--";
+      hourly.temp[i] = h["temp"].as<String>();
+      hourly.icon[i] = h["icon"].as<String>();
+      hourly.tempInt[i] = hourly.temp[i].toInt();
+    }
+    hourly.valid = (count > 0);
+    xSemaphoreGive(dataMutex);
   }
-  hourly.valid = (count > 0);
 }
 
 void fetchDaily() {
@@ -253,8 +264,11 @@ void fetchDaily() {
   if (err) return;
   if (strcmp(doc["code"], "200") != 0) return;
 
-  weather.tempMax = doc["daily"][0]["tempMax"].as<String>();
-  weather.tempMin = doc["daily"][0]["tempMin"].as<String>();
+  if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+    weather.tempMax = doc["daily"][0]["tempMax"].as<String>();
+    weather.tempMin = doc["daily"][0]["tempMin"].as<String>();
+    xSemaphoreGive(dataMutex);
+  }
 }
 
 const char* iconToCN(int code) {

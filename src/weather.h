@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "config.h"
 
 struct WeatherData {
@@ -33,6 +35,7 @@ struct AppState {
   bool ntpTried;
   bool weatherLoaded;
   bool showingSystemInfo;
+  bool systemInfoDirty;
   unsigned long lastWeatherFetch;
   unsigned long lastNtpAttempt;
   char ntpFailReason[24];
@@ -47,6 +50,9 @@ extern WeatherData weather;
 extern HourlyData hourly;
 extern AppState state;
 extern NTPClient *timeClient;
+extern SemaphoreHandle_t dataMutex;
+extern volatile bool networkBusy;
+extern volatile bool weatherUpdated;
 
 void initWiFi();
 void initNTP();

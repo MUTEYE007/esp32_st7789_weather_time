@@ -70,7 +70,7 @@ void drawWeatherSection() {
   fillArea(PAD_LEFT, WEATHER_Y, CONTENT_W, WEATHER_H, COLOR_BG);
 
   if (!weather.valid) {
-    drawHanziText(tft, 50, WEATHER_Y + 10, "不可用", COLOR_LABEL);
+    drawHanziText(tft, 50, WEATHER_Y + 8, "不可用", COLOR_LABEL);
     return;
   }
 
@@ -266,150 +266,227 @@ void drawHourlyChart() {
 }
 
 void drawSystemInfo() {
-  tft->fillScreen(COLOR_BG);
+  if (state.systemInfoDirty) {
+    state.systemInfoDirty = false;
+    tft->fillScreen(COLOR_BG);
 
-  fillArea(2, 2, SCREEN_W - 4, 16, COLOR_CLOCK);
-  tft->setTextColor(COLOR_BG);
-  tft->setTextSize(1);
-  tft->setCursor(8, 5);
-  tft->print("SYSTEM STATUS");
+    fillArea(2, 2, SCREEN_W - 4, 16, COLOR_CLOCK);
+    tft->setTextColor(COLOR_BG);
+    tft->setTextSize(1);
+    tft->setCursor(8, 5);
+    tft->print("SYSTEM STATUS");
 
-  int y = 24;
-  int lh = 12;
+    int y = 24;
+    int lh = 12;
 
-  tft->setTextSize(1);
-  tft->setTextColor(COLOR_CLOCK);
-  tft->setCursor(8, y);
-  tft->print("[ ESP32 ]");
-  y += lh;
+    tft->setTextSize(1);
+    tft->setTextColor(COLOR_CLOCK);
+    tft->setCursor(8, y);
+    tft->print("[ ESP32 ]");
+    y += lh;
 
-  drawLabel(8, y, "Chip: ");
-  tft->setTextColor(COLOR_PRIMARY);
-  tft->print(ESP.getChipModel());
-  tft->print(" rev");
-  tft->print(ESP.getChipRevision());
-  y += lh;
+    drawLabel(8, y, "Chip: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    tft->print(ESP.getChipModel());
+    tft->print(" rev");
+    tft->print(ESP.getChipRevision());
+    y += lh;
 
-  drawLabel(8, y, "Flash: ");
-  tft->setTextColor(COLOR_PRIMARY);
-  tft->print(ESP.getFlashChipSize() / (1024 * 1024));
-  tft->print("MB  Free: ");
-  tft->print(ESP.getFreeHeap() / 1024);
-  tft->print("KB");
-  y += lh;
+    drawLabel(8, y, "Flash: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    tft->print(ESP.getFlashChipSize() / (1024 * 1024));
+    tft->print("MB  Free: ");
+    tft->print(ESP.getFreeHeap() / 1024);
+    tft->print("KB");
+    y += lh;
 
-  drawLabel(8, y, "Uptime: ");
-  tft->setTextColor(COLOR_PRIMARY);
-  unsigned long up = millis() / 1000;
-  tft->print(up / 3600);
-  tft->print("h ");
-  tft->print((up % 3600) / 60);
-  tft->print("m ");
-  tft->print(up % 60);
-  tft->print("s");
-  y += lh + 4;
+    drawLabel(8, y, "Uptime: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    unsigned long up = millis() / 1000;
+    tft->print(up / 3600);
+    tft->print("h ");
+    tft->print((up % 3600) / 60);
+    tft->print("m ");
+    tft->print(up % 60);
+    tft->print("s");
+    y += lh + 4;
 
-  drawSectionLine(y);
-  y += 4;
+    drawSectionLine(y);
+    y += 4;
 
-  tft->setTextColor(COLOR_CLOCK);
-  tft->setCursor(8, y);
-  tft->print("[ WiFi ]");
-  y += lh;
+    tft->setTextColor(COLOR_CLOCK);
+    tft->setCursor(8, y);
+    tft->print("[ WiFi ]");
+    y += lh;
 
-  drawLabel(8, y, "SSID: ");
-  tft->setTextColor(COLOR_PRIMARY);
-  tft->print(WIFI_SSID);
-  y += lh;
+    drawLabel(8, y, "SSID: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    tft->print(WIFI_SSID);
+    y += lh;
 
-  drawLabel(8, y, "IP:   ");
-  tft->setTextColor(state.wifiConnected ? COLOR_GREEN : COLOR_ACCENT);
-  if (state.wifiConnected) tft->print(WiFi.localIP().toString());
-  else tft->print("--.--.--.--");
-  y += lh;
+    drawLabel(8, y, "IP:   ");
+    tft->setTextColor(state.wifiConnected ? COLOR_GREEN : COLOR_ACCENT);
+    if (state.wifiConnected) tft->print(WiFi.localIP().toString());
+    else tft->print("--.--.--.--");
+    y += lh;
 
-  drawLabel(8, y, "GW:   ");
-  tft->setTextColor(COLOR_PRIMARY);
-  if (state.wifiConnected) tft->print(WiFi.gatewayIP().toString());
-  else tft->print("--.--.--.--");
-  y += lh;
+    drawLabel(8, y, "GW:   ");
+    tft->setTextColor(COLOR_PRIMARY);
+    if (state.wifiConnected) tft->print(WiFi.gatewayIP().toString());
+    else tft->print("--.--.--.--");
+    y += lh;
 
-  drawLabel(8, y, "RSSI: ");
-  tft->setTextColor(COLOR_PRIMARY);
-  if (state.wifiConnected) {
-    tft->print(WiFi.RSSI());
-    tft->print("dBm");
+    drawLabel(8, y, "RSSI: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    if (state.wifiConnected) {
+      tft->print(WiFi.RSSI());
+      tft->print("dBm");
+    } else {
+      tft->print("N/A");
+    }
+    y += lh + 4;
+
+    drawSectionLine(y);
+    y += 4;
+
+    tft->setTextColor(COLOR_CLOCK);
+    tft->setCursor(8, y);
+    tft->print("[ NTP ]");
+    y += lh;
+
+    drawLabel(8, y, "Status: ");
+    tft->setTextColor(state.timeSynced ? COLOR_GREEN : COLOR_ACCENT);
+    tft->print(state.timeSynced ? "Synced" : "Failed");
+    y += lh;
+
+    drawLabel(8, y, "Server: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    if (state.timeSynced) tft->print(state.ntpServer);
+    else tft->print("--");
+    y += lh;
+
+    drawLabel(8, y, "Time:  ");
+    tft->setTextColor(COLOR_PRIMARY);
+    if (state.timeSynced) {
+      time_t t = timeClient->getEpochTime();
+      struct tm *ti = localtime(&t);
+      char buf[20];
+      sprintf(buf, "%04d-%02d-%02d %02d:%02d",
+        ti->tm_year + 1900, ti->tm_mon + 1, ti->tm_mday,
+        ti->tm_hour, ti->tm_min);
+      tft->print(buf);
+    } else {
+      tft->print("Not available");
+    }
+    y += lh + 4;
+
+    drawSectionLine(y);
+    y += 4;
+
+    tft->setTextColor(COLOR_CLOCK);
+    tft->setCursor(8, y);
+    tft->print("[ Weather API ]");
+    y += lh;
+
+    drawLabel(8, y, "Now: ");
+    tft->setTextColor(weather.valid ? COLOR_GREEN : COLOR_ACCENT);
+    tft->print(weather.valid ? "OK" : "N/A");
+    drawLabel(120, y, "3d: ");
+    tft->setTextColor(weather.tempMax.length() > 0 ? COLOR_GREEN : COLOR_ACCENT);
+    tft->print(weather.tempMax.length() > 0 ? "OK" : "N/A");
+    y += lh;
+
+    drawLabel(8, y, "24h: ");
+    tft->setTextColor(hourly.valid ? COLOR_GREEN : COLOR_ACCENT);
+    tft->print(hourly.valid ? "OK" : "N/A");
+
+    drawLabel(120, y, "Mem: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    tft->print(ESP.getFreeHeap() / 1024);
+    tft->print("KB");
+    y += lh;
+
+    drawSectionLine(y);
+    y += 2;
+    tft->setTextColor(COLOR_LABEL);
+    tft->setTextSize(1);
+    tft->setCursor(8, y);
+    tft->print("Press BOOT to return");
+
   } else {
-    tft->print("N/A");
+    int lh = 12;
+
+    fillArea(8, 298, CONTENT_W, lh + 16, COLOR_BG);
+    int y = 301;
+    drawLabel(8, y, "Uptime: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    unsigned long up = millis() / 1000;
+    tft->print(up / 3600);
+    tft->print("h ");
+    tft->print((up % 3600) / 60);
+    tft->print("m ");
+    tft->print(up % 60);
+    tft->print("s");
+
+    y = 350;
+    fillArea(PAD_LEFT, y, CONTENT_W, 412 - y, COLOR_BG);
+    tft->setTextColor(COLOR_CLOCK);
+    tft->setTextSize(1);
+    tft->setCursor(8, y);
+    tft->print("[ NTP ]");
+    y += lh;
+
+    drawLabel(8, y, "Status: ");
+    tft->setTextColor(state.timeSynced ? COLOR_GREEN : COLOR_ACCENT);
+    tft->print(state.timeSynced ? "Synced" : "Failed");
+    y += lh;
+
+    drawLabel(8, y, "Server: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    if (state.timeSynced) tft->print(state.ntpServer);
+    else tft->print("--");
+    y += lh;
+
+    drawLabel(8, y, "Time:  ");
+    tft->setTextColor(COLOR_PRIMARY);
+    if (state.timeSynced) {
+      time_t t = timeClient->getEpochTime();
+      struct tm *ti = localtime(&t);
+      char buf[20];
+      sprintf(buf, "%04d-%02d-%02d %02d:%02d",
+        ti->tm_year + 1900, ti->tm_mon + 1, ti->tm_mday,
+        ti->tm_hour, ti->tm_min);
+      tft->print(buf);
+    } else {
+      tft->print("Not available");
+    }
+    y += lh + 4;
+
+    drawSectionLine(y);
+    y += 4;
+
+    tft->setTextColor(COLOR_CLOCK);
+    tft->setCursor(8, y);
+    tft->print("[ Weather API ]");
+    y += lh;
+
+    drawLabel(8, y, "Now: ");
+    tft->setTextColor(weather.valid ? COLOR_GREEN : COLOR_ACCENT);
+    tft->print(weather.valid ? "OK" : "N/A");
+    drawLabel(120, y, "3d: ");
+    tft->setTextColor(weather.tempMax.length() > 0 ? COLOR_GREEN : COLOR_ACCENT);
+    tft->print(weather.tempMax.length() > 0 ? "OK" : "N/A");
+    y += lh;
+
+    drawLabel(8, y, "24h: ");
+    tft->setTextColor(hourly.valid ? COLOR_GREEN : COLOR_ACCENT);
+    tft->print(hourly.valid ? "OK" : "N/A");
+
+    drawLabel(120, y, "Mem: ");
+    tft->setTextColor(COLOR_PRIMARY);
+    tft->print(ESP.getFreeHeap() / 1024);
+    tft->print("KB");
   }
-  y += lh + 4;
-
-  drawSectionLine(y);
-  y += 4;
-
-  tft->setTextColor(COLOR_CLOCK);
-  tft->setCursor(8, y);
-  tft->print("[ NTP ]");
-  y += lh;
-
-  drawLabel(8, y, "Status: ");
-  tft->setTextColor(state.timeSynced ? COLOR_GREEN : COLOR_ACCENT);
-  tft->print(state.timeSynced ? "Synced" : "Failed");
-  y += lh;
-
-  drawLabel(8, y, "Server: ");
-  tft->setTextColor(COLOR_PRIMARY);
-  if (state.timeSynced) tft->print(state.ntpServer);
-  else tft->print("--");
-  y += lh;
-
-  drawLabel(8, y, "Time:  ");
-  tft->setTextColor(COLOR_PRIMARY);
-  if (state.timeSynced) {
-    time_t t = timeClient->getEpochTime();
-    struct tm *ti = localtime(&t);
-    char buf[20];
-    sprintf(buf, "%04d-%02d-%02d %02d:%02d",
-      ti->tm_year + 1900, ti->tm_mon + 1, ti->tm_mday,
-      ti->tm_hour, ti->tm_min);
-    tft->print(buf);
-  } else {
-    tft->print("Not available");
-  }
-  y += lh + 4;
-
-  drawSectionLine(y);
-  y += 4;
-
-  tft->setTextColor(COLOR_CLOCK);
-  tft->setCursor(8, y);
-  tft->print("[ Weather API ]");
-  y += lh;
-
-  drawLabel(8, y, "Now: ");
-  tft->setTextColor(weather.valid ? COLOR_GREEN : COLOR_ACCENT);
-  tft->print(weather.valid ? "OK" : "N/A");
-  drawLabel(120, y, "3d: ");
-  tft->setTextColor(weather.tempMax.length() > 0 ? COLOR_GREEN : COLOR_ACCENT);
-  tft->print(weather.tempMax.length() > 0 ? "OK" : "N/A");
-  y += lh;
-
-  drawLabel(8, y, "24h: ");
-  tft->setTextColor(hourly.valid ? COLOR_GREEN : COLOR_ACCENT);
-  tft->print(hourly.valid ? "OK" : "N/A");
-
-  drawLabel(120, y, "Mem: ");
-  tft->setTextColor(COLOR_PRIMARY);
-  tft->print(ESP.getFreeHeap() / 1024);
-  tft->print("KB");
-  y += lh;
-
-  drawSectionLine(y);
-  y += 2;
-  tft->setTextColor(COLOR_LABEL);
-  tft->setTextSize(1);
-  tft->setCursor(8, y);
-  tft->print("Press BOOT to return");
 }
 
 void drawError(const char *msg) {

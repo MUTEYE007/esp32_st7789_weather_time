@@ -5,6 +5,8 @@
 #include "weather.h"
 #include "ui.h"
 
+static unsigned long lastWifiTry = 0;
+
 static void showBootScreen(const char *title) {
   tft->fillScreen(COLOR_BG);
   fillArea(2, 2, SCREEN_W - 4, STATUS_H, COLOR_ACCENT);
@@ -22,154 +24,186 @@ static void showBootLine(int y, const char *text, uint16_t color) {
   tft->print(text);
 }
 
-static void bootWiFi() {
-  showBootScreen("NETWORK STARTUP");
-  int y = 28;
-  showBootLine(y, "WiFi connecting...", COLOR_PRIMARY);
-  y += 24;
-
+void networkTask(void *pvParameters) {
   initWiFi();
+  lastWifiTry = millis();
 
-  if (state.wifiConnected) {
-    showBootLine(y, "Connected!", COLOR_GREEN);
-    y += 12;
-    char ipBuf[32];
-    sprintf(ipBuf, "IP: %s", WiFi.localIP().toString().c_str());
-    showBootLine(y, ipBuf, COLOR_CLOCK);
-  } else {
-    showBootLine(y, "Connection failed!", COLOR_ACCENT);
+  for (int i = 0; i < 60; i++) {
+    if (WiFi.status() == WL_CONNECTED) {
+      state.wifiConnected = true;
+      break;
+    }
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
-  delay(1200);
+
+  while (1) {
+    unsigned long now = millis();
+
+    if (WiFi.status() != WL_CONNECTED) {
+      if (now - lastWifiTry > 5000) {
+        WiFi.reconnect();
+        lastWifiTry = now;
+      }
+      vTaskDelay(500 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+      if (!state.wifiConnected) {
+        state.wifiConnected = true;
+      }
+      xSemaphoreGive(dataMutex);
+    }
+
+    if (!state.timeSynced && (now - state.lastNtpAttempt > 30000 || state.lastNtpAttempt == 0)) {
+      initNTP();
+    }
+
+    if (state.timeSynced) {
+      timeClient->update();
+    }
+
+    if (state.timeSynced && state.wifiConnected &&
+        (now - state.lastWeatherFetch > WEATHER_INTERVAL_MS || state.lastWeatherFetch == 0)) {
+      networkBusy = true;
+      fetchWeather();
+      fetchDaily();
+      fetchHourly();
+      weatherUpdated = true;
+      networkBusy = false;
+      if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+        state.lastWeatherFetch = millis();
+        xSemaphoreGive(dataMutex);
+      }
+    }
+
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+  }
 }
 
-static void bootNTP() {
-  int y = 100;
-  if (!state.wifiConnected) {
-    showBootLine(y, "NTP skipped (no WiFi)", COLOR_ACCENT);
-    delay(800);
-    return;
+void uiTask(void *pvParameters) {
+  showBootScreen("ESP32 Mini TV");
+  int y = 40;
+  showBootLine(y, "Starting...", COLOR_LABEL);
+  vTaskDelay(300 / portTICK_PERIOD_MS);
+
+  int loadingFrame = 0;
+  int lastUiSec = -1;
+  int infoLastSec = -1;
+  int lastBtnState = HIGH;
+  bool uiReady = false;
+
+  while (1) {
+    unsigned long now = millis();
+    int curBtn = digitalRead(BTN_PIN);
+
+    if (curBtn == LOW && lastBtnState == HIGH) {
+      if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+        state.showingSystemInfo = !state.showingSystemInfo;
+        if (state.showingSystemInfo) state.systemInfoDirty = true;
+        xSemaphoreGive(dataMutex);
+      }
+      if (state.showingSystemInfo) {
+        drawSystemInfo();
+      } else {
+        drawFullUI();
+      }
+    }
+    lastBtnState = curBtn;
+
+    if (state.showingSystemInfo) {
+      int curSec = -1;
+      if (state.timeSynced) {
+        time_t t = timeClient->getEpochTime();
+        struct tm *ti = localtime(&t);
+        curSec = ti->tm_sec;
+      } else {
+        curSec = (now / 1000) % 60;
+      }
+      if (curSec != infoLastSec) {
+        drawSystemInfo();
+        infoLastSec = curSec;
+      }
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    if (networkBusy) {
+      drawLoadingFrame(loadingFrame);
+      loadingFrame = (loadingFrame + 1) % 8;
+    }
+
+    if (weatherUpdated) {
+      if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+        weatherUpdated = false;
+        xSemaphoreGive(dataMutex);
+      }
+      if (!uiReady) {
+        uiReady = true;
+        drawFullUI();
+      } else {
+        fillArea(PAD_LEFT, DETAIL_Y, CONTENT_W, CHART_Y - DETAIL_Y + CHART_H, COLOR_BG);
+        drawWeatherSection();
+        drawDetailSection();
+        drawHourlyChart();
+      }
+    }
+
+    int curSec = -1, curMin = -1;
+    if (state.timeSynced) {
+      time_t t = timeClient->getEpochTime();
+      struct tm *ti = localtime(&t);
+      curSec = ti->tm_sec;
+      curMin = ti->tm_min;
+    } else {
+      curSec = (now / 1000) % 60;
+      curMin = (now / 60000) % 60;
+    }
+
+    if (curSec != lastUiSec) {
+      lastUiSec = curSec;
+      drawClockSection();
+      drawStatusHeader();
+    }
+
+    vTaskDelay(50 / portTICK_PERIOD_MS);
   }
-
-  showBootLine(y, "NTP syncing...", COLOR_LABEL);
-  initNTP();
-
-  if (state.timeSynced) {
-    showBootLine(y, "NTP synced!", COLOR_GREEN);
-  } else {
-    char buf[32];
-    sprintf(buf, "NTP: %s", state.ntpFailReason);
-    showBootLine(y, buf, COLOR_ACCENT);
-  }
-  delay(600);
-}
-
-static int loadingFrame = 0;
-
-static void refreshWeatherWithUI() {
-  for (int i = 0; i < 12; i++) {
-    drawLoadingFrame(loadingFrame);
-    loadingFrame = (loadingFrame + 1) % 8;
-    delay(80);
-  }
-  fetchWeather();
-  fetchDaily();
-  fetchHourly();
-  drawWeatherSection();
-  drawDetailSection();
-  drawHourlyChart();
-  state.lastWeatherFetch = millis();
 }
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32 Desktop Mini TV Starting...");
+  Serial.println("ESP32 Desktop Mini TV (FreeRTOS)");
 
   state.wifiConnected = false;
   state.timeSynced = false;
   state.ntpTried = false;
   state.weatherLoaded = false;
   state.showingSystemInfo = false;
+  state.systemInfoDirty = true;
   state.lastWeatherFetch = 0;
   state.lastNtpAttempt = 0;
   strcpy(state.ntpFailReason, "");
   strcpy(state.ntpServer, "");
-  state.lastSecond = -1;
-  state.lastMinute = -1;
-  state.lastBtnState = HIGH;
   state.bootTime = millis();
   weather.valid = false;
   hourly.valid = false;
 
+  dataMutex = xSemaphoreCreateMutex();
+  networkBusy = false;
+  weatherUpdated = false;
+
   initDisplay();
   pinMode(BTN_PIN, INPUT_PULLUP);
 
-  bootWiFi();
-  bootNTP();
-  refreshWeatherWithUI();
-  drawFullUI();
+  xTaskCreatePinnedToCore(
+    networkTask, "network", 8192, NULL, 1, NULL, 0
+  );
+
+  xTaskCreatePinnedToCore(
+    uiTask, "ui", 8192, NULL, 2, NULL, 1
+  );
+
+  vTaskDelete(NULL);
 }
 
-void loop() {
-  unsigned long now = millis();
-
-  int curBtn = digitalRead(BTN_PIN);
-  if (curBtn == LOW && state.lastBtnState == HIGH) {
-    state.showingSystemInfo = !state.showingSystemInfo;
-    if (state.showingSystemInfo) drawSystemInfo();
-    else drawFullUI();
-  }
-  state.lastBtnState = curBtn;
-
-  if (state.showingSystemInfo) { delay(50); return; }
-
-  if (state.wifiConnected && state.timeSynced) {
-    timeClient->update();
-  }
-
-  if (!state.timeSynced && state.wifiConnected &&
-      (now - state.lastNtpAttempt > 30000 || state.lastNtpAttempt == 0)) {
-    initNTP();
-    if (state.timeSynced) drawFullUI();
-    else drawClockSection();
-  }
-
-  int curSec = -1, curMin = -1;
-  if (state.timeSynced) {
-    time_t t = timeClient->getEpochTime();
-    struct tm *ti = localtime(&t);
-    curSec = ti->tm_sec;
-    curMin = ti->tm_min;
-  } else {
-    curSec = (now / 1000) % 60;
-    curMin = (now / 60000) % 60;
-  }
-
-  if (curMin != state.lastMinute || !state.weatherLoaded) {
-    state.lastMinute = curMin;
-    if (now - state.lastWeatherFetch > WEATHER_INTERVAL_MS || state.lastWeatherFetch == 0) {
-      if (state.wifiConnected) {
-        refreshWeatherWithUI();
-      }
-    }
-  }
-
-  if (curSec != state.lastSecond) {
-    state.lastSecond = curSec;
-    drawClockSection();
-    drawStatusHeader();
-  }
-
-  if (WiFi.status() != WL_CONNECTED && state.wifiConnected) {
-    state.wifiConnected = false;
-    drawError("WiFi Disconnected");
-    WiFi.reconnect();
-  } else if (WiFi.status() == WL_CONNECTED && !state.wifiConnected) {
-    state.wifiConnected = true;
-    if (!state.timeSynced) initNTP();
-    state.lastWeatherFetch = 0;
-    drawWeatherSection();
-    drawStatusHeader();
-  }
-
-  delay(50);
-}
+void loop() {}
