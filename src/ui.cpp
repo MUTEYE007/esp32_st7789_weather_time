@@ -86,6 +86,7 @@ void drawWeatherSection() {
   tft->print("C");
 
   drawHanziText(tft, CITY_X, CITY_Y, "福州", COLOR_CLOCK);
+  drawHanziText(tft, CITY_X + 40, CITY_Y, weather.weatherText.c_str(), COLOR_PRIMARY);
 
   if (weather.tempMax.length() > 0) {
     tft->setCursor(HILO_X, HILO_Y1);
@@ -101,8 +102,6 @@ void drawWeatherSection() {
     tft->setTextColor(COLOR_CLOCK);
     tft->print(weather.tempMin);
   }
-
-  drawHanziText(tft, WTEXT_X, WTEXT_Y, weather.weatherText.c_str(), COLOR_PRIMARY);
 }
 
 void drawClockSection() {
@@ -126,7 +125,7 @@ void drawClockSection() {
     s = (ms / 1000) % 60;
     m = (ms / 60000) % 60;
     h = (ms / 3600000) % 24;
-    strcpy(dateBuf, "NTP failed, local time");
+    strcpy(dateBuf, state.ntpFailReason);
   } else {
     tft->setTextColor(COLOR_ACCENT);
     tft->setTextSize(2);
@@ -166,37 +165,47 @@ void drawDetailSection() {
 
   if (!weather.valid) return;
 
-  drawHanziText(tft, PAD_LEFT, DETAIL_ROW1_Y, "体感", COLOR_LABEL);
+  int l1 = drawHanziText(tft, PAD_LEFT, DETAIL_ROW1_Y, "体感", COLOR_LABEL);
   tft->setTextSize(2);
+  tft->setTextColor(COLOR_LABEL);
+  tft->setCursor(l1 + 1, DETAIL_ROW1_Y + 4);
+  tft->print(":");
   tft->setTextColor(COLOR_PRIMARY);
-  tft->setCursor(44, DETAIL_ROW1_Y);
+  tft->setCursor(l1 + 12, DETAIL_ROW1_Y);
   tft->print(weather.feelsLike);
   tft->print("C");
 
+  int l2 = drawHanziText(tft, 120, DETAIL_ROW1_Y, "湿度", COLOR_LABEL);
+  tft->setTextSize(2);
   tft->setTextColor(COLOR_LABEL);
-  tft->setCursor(120, DETAIL_ROW1_Y);
-  tft->setTextSize(1);
-  tft->print("Hum ");
+  tft->setCursor(l2 + 1, DETAIL_ROW1_Y + 4);
+  tft->print(":");
   tft->setTextColor(COLOR_PRIMARY);
+  tft->setCursor(l2 + 12, DETAIL_ROW1_Y);
   tft->print(weather.humidity);
   tft->print("%");
 
-  drawHanziText(tft, PAD_LEFT, DETAIL_ROW2_Y, "更新", COLOR_LABEL);
+  int l3 = drawHanziText(tft, PAD_LEFT, DETAIL_ROW2_Y, "更新", COLOR_LABEL);
   tft->setTextSize(2);
+  tft->setTextColor(COLOR_LABEL);
+  tft->setCursor(l3 + 1, DETAIL_ROW2_Y + 4);
+  tft->print(":");
   tft->setTextColor(COLOR_PRIMARY);
-  tft->setCursor(44, DETAIL_ROW2_Y);
+  tft->setCursor(l3 + 12, DETAIL_ROW2_Y);
   if (weather.updateTime.length() >= 16) {
     tft->print(weather.updateTime.substring(11, 16));
   }
 
+  int l4 = drawHanziText(tft, 120, DETAIL_ROW2_Y, "风", COLOR_LABEL);
+  tft->setTextSize(2);
   tft->setTextColor(COLOR_LABEL);
-  tft->setCursor(120, DETAIL_ROW2_Y);
-  tft->setTextSize(1);
-  tft->print("Wind ");
+  tft->setCursor(l4 + 1, DETAIL_ROW2_Y + 4);
+  tft->print(":");
+  int wdEnd = drawHanziText(tft, l4 + 12, DETAIL_ROW2_Y, weather.windDir.c_str(), COLOR_PRIMARY);
   tft->setTextColor(COLOR_PRIMARY);
-  tft->print(windDirToEn(weather.windDir));
-  tft->print("-");
+  tft->setCursor(wdEnd + 2, DETAIL_ROW2_Y);
   tft->print(weather.windScale);
+  drawHanziText(tft, wdEnd + 2 + weather.windScale.length() * 12, DETAIL_ROW2_Y, "级", COLOR_PRIMARY);
 }
 
 void drawHourlyChart() {
@@ -348,6 +357,12 @@ void drawSystemInfo() {
   tft->print(state.timeSynced ? "Synced" : "Failed");
   y += lh;
 
+  drawLabel(8, y, "Server: ");
+  tft->setTextColor(COLOR_PRIMARY);
+  if (state.timeSynced) tft->print(state.ntpServer);
+  else tft->print("--");
+  y += lh;
+
   drawLabel(8, y, "Time:  ");
   tft->setTextColor(COLOR_PRIMARY);
   if (state.timeSynced) {
@@ -434,7 +449,6 @@ void drawFullUI() {
   drawStatusHeader();
   drawSectionLine(LINE1_Y);
   drawWeatherSection();
-  drawSectionLine(LINE2_Y);
   drawClockSection();
   drawSectionLine(LINE3_Y);
   drawDetailSection();

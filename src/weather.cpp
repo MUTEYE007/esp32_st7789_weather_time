@@ -27,19 +27,41 @@ void initWiFi() {
 void initNTP() {
   if (!state.wifiConnected) return;
 
-  if (timeClient == nullptr) {
-    timeClient = new NTPClient(ntpUDP, "pool.ntp.org", 28800, 3600000);
-  }
+  static const char *servers[] = {
+    "ntp.ntsc.ac.cn",
+    "ntp1.aliyun.com", "ntp2.aliyun.com", "ntp3.aliyun.com",
+    "ntp4.aliyun.com", "ntp5.aliyun.com", "ntp6.aliyun.com", "ntp7.aliyun.com",
+    "ntp.tencent.com", "ntp1.tencent.com", "ntp2.tencent.com",
+    "ntp3.tencent.com", "ntp4.tencent.com", "ntp5.tencent.com",
+    "pool.ntp.org"
+  };
 
   state.timeSynced = false;
-  for (int i = 0; i < 10 && !state.timeSynced; i++) {
-    if (timeClient->forceUpdate()) {
-      state.timeSynced = true;
-      break;
+  for (int s = 0; s < (int)(sizeof(servers)/sizeof(servers[0])) && !state.timeSynced; s++) {
+    IPAddress ip;
+    if (!WiFi.hostByName(servers[s], ip)) continue;
+
+    if (timeClient == nullptr) {
+      timeClient = new NTPClient(ntpUDP, servers[s], 28800, 60000);
+    } else {
+      delete timeClient;
+      timeClient = new NTPClient(ntpUDP, servers[s], 28800, 60000);
     }
-    delay(500);
+    timeClient->begin();
+
+    for (int i = 0; i < 3 && !state.timeSynced; i++) {
+      if (timeClient->forceUpdate()) {
+        state.timeSynced = true;
+        strcpy(state.ntpServer, servers[s]);
+        break;
+      }
+      delay(200);
+    }
   }
+
+  if (!state.timeSynced) strcpy(state.ntpFailReason, "all servers failed");
   state.ntpTried = true;
+  state.lastNtpAttempt = millis();
 }
 
 static String urlEncode(String str) {
@@ -245,18 +267,4 @@ const char* iconToCN(int code) {
   if (code >= 400 && code <= 499) return "雪";
   if (code >= 500 && code <= 599) return "雾";
   return "";
-}
-
-String windDirToEn(String cn) {
-  if (cn.indexOf("旋转") >= 0) return "Rot";
-  if (cn.indexOf("无持续") >= 0) return "Calm";
-  if (cn.indexOf("北") >= 0 && cn.indexOf("东") >= 0) return "NE";
-  if (cn.indexOf("北") >= 0 && cn.indexOf("西") >= 0) return "NW";
-  if (cn.indexOf("南") >= 0 && cn.indexOf("东") >= 0) return "SE";
-  if (cn.indexOf("南") >= 0 && cn.indexOf("西") >= 0) return "SW";
-  if (cn.indexOf("北") >= 0) return "N";
-  if (cn.indexOf("南") >= 0) return "S";
-  if (cn.indexOf("东") >= 0) return "E";
-  if (cn.indexOf("西") >= 0) return "W";
-  return "--";
 }

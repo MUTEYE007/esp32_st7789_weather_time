@@ -56,7 +56,9 @@ static void bootNTP() {
   if (state.timeSynced) {
     showBootLine(y, "NTP synced!", COLOR_GREEN);
   } else {
-    showBootLine(y, "NTP failed - local time", COLOR_ACCENT);
+    char buf[32];
+    sprintf(buf, "NTP: %s", state.ntpFailReason);
+    showBootLine(y, buf, COLOR_ACCENT);
   }
   delay(600);
 }
@@ -88,6 +90,9 @@ void setup() {
   state.weatherLoaded = false;
   state.showingSystemInfo = false;
   state.lastWeatherFetch = 0;
+  state.lastNtpAttempt = 0;
+  strcpy(state.ntpFailReason, "");
+  strcpy(state.ntpServer, "");
   state.lastSecond = -1;
   state.lastMinute = -1;
   state.lastBtnState = HIGH;
@@ -121,7 +126,8 @@ void loop() {
     timeClient->update();
   }
 
-  if (!state.timeSynced && !state.ntpTried && state.wifiConnected) {
+  if (!state.timeSynced && state.wifiConnected &&
+      (now - state.lastNtpAttempt > 30000 || state.lastNtpAttempt == 0)) {
     initNTP();
     if (state.timeSynced) drawFullUI();
     else drawClockSection();

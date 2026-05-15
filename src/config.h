@@ -33,22 +33,19 @@
 #define ICON_CX      28
 #define ICON_CY      38
 #define TEMP_X       56
-#define TEMP_Y       22
+#define TEMP_Y       26
 #define HILO_X       180
 #define HILO_Y1      26
 #define HILO_Y2      42
-#define CITY_X       120
+#define CITY_X       98
 #define CITY_Y       26
-#define WTEXT_X      PAD_LEFT
-#define WTEXT_Y      48
 
-#define LINE2_Y      58
-#define CLOCK_Y      64
-#define CLOCK_H      54
-#define CLOCK_TEXT_Y 68
+#define CLOCK_Y      56
+#define CLOCK_H      58
+#define CLOCK_TEXT_Y 60
 #define SEC_X_OFFSET 6
-#define SEC_Y        87
-#define DATE_Y       108
+#define SEC_Y        79
+#define DATE_Y       100
 
 #define LINE3_Y      120
 #define DETAIL_Y     124
@@ -56,25 +53,26 @@
 #define DETAIL_ROW1_Y 126
 #define DETAIL_ROW2_Y 142
 
-#define LINE4_Y      160
-#define CHART_Y      164
-#define CHART_H      70
-#define CHART_LABEL_Y 168
-#define CHART_LINE1_Y 184
-#define CHART_LINE2_Y 200
-#define CHART_LINE3_Y 216
-#define CHART_DATA_TOP 180
-#define CHART_DATA_BOT 218
-#define CHART_TEMP_Y  222
+#define LINE4_Y      164
+#define CHART_Y      168
+#define CHART_H      66
+#define CHART_LABEL_Y 172
+#define CHART_LINE1_Y 188
+#define CHART_LINE2_Y 204
+#define CHART_LINE3_Y 220
+#define CHART_DATA_TOP 184
+#define CHART_DATA_BOT 220
+#define CHART_TEMP_Y  228
 #define CHART_START_X  20
 #define CHART_COL_W    34
-#define CHART_POINTS   6
+#define CHART_POINTS   7
+
 #define CHART_PT_R     4
 
 #define BAR_Y        236
 #define BAR_H        2
 
-#define HOUR_COUNT   6
+#define HOUR_COUNT   7
 
 #define COLOR_BG       0x0824
 #define COLOR_PRIMARY  0xFFFF

@@ -34,6 +34,9 @@ struct AppState {
   bool weatherLoaded;
   bool showingSystemInfo;
   unsigned long lastWeatherFetch;
+  unsigned long lastNtpAttempt;
+  char ntpFailReason[24];
+  char ntpServer[32];
   int lastSecond;
   int lastMinute;
   int lastBtnState;
@@ -51,4 +54,3 @@ bool fetchWeather();
 void fetchHourly();
 void fetchDaily();
 const char* iconToCN(int code);
-String windDirToEn(String cn);
