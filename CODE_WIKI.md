@@ -18,7 +18,6 @@
 7. [Page System & Interaction](#7-page-system--interaction)
 8. [Dependencies](#8-dependencies)
 9. [Build & Run](#9-build--run)
-10. [Development Tools](#10-development-tools)
 
 ---
 
@@ -57,12 +56,6 @@
 
 ```
 esp32_st7789_weather_time/
-├── .vscode/
-│   └── extensions.json           # VS Code extension recommendations
-├── tools/
-│   ├── gen_gb2312_font.py        # GB2312 font generator (primary)
-│   ├── test_weather_text_sim.py  # Python simulation test for text layout
-│   └── cities.json               # City name data for font generation
 ├── src/                          # Core source code
 │   ├── main.cpp                  # Entry point, FreeRTOS task creation
 │   ├── config.h                  # (gitignored) Local configuration with API Key
@@ -73,9 +66,11 @@ esp32_st7789_weather_time/
 │   ├── config_server.h / config_server.cpp  # HTTP configuration server
 │   └── gb2312_font.h             # GB2312 level-1 bitmap font (~142 KB, auto-generated)
 ├── platformio.ini                # PlatformIO project configuration
-├── ui_layout.html                # Screen layout reference (HTML simulation)
-└── README.md                     # Project README
+├── CODE_WIKI.md                  # This document — Code Wiki
+└── README.md                     # Project README (user-friendly)
 ```
+
+> **Note:** `config.h` is excluded from version control via `.gitignore` (pattern: `src/config.h`). Use `config.h.template` as a reference to create your own.
 
 ---
 
@@ -139,7 +134,7 @@ tft->setTextWrap(false);
 │  weather.cpp — Data & Network Layer                        │
 │  ├─ WiFi management (WiFiManager provisioning)            │
 │  ├─ NTP time sync (15-server round-robin state machine)   │
-│  ├─ Geo-location resolution (3-tier fallback: ipip→B站→乐视)│
+│  ├─ Geo-location resolution (3-tier fallback)             │
 │  └─ Weather API requests (now/24h/3d/alerts/precipitation)│
 ├───────────────────────────────────────────────────────────┤
 │  display.cpp — Hardware Abstraction Layer                  │
@@ -183,8 +178,8 @@ networkTask (Core 0) loop:
   ├─ WiFiManager::autoConnect()
   │    ├─ First boot → AP mode → phone connects → Wi-Fi configured
   │    └─ Already configured → auto-connect
-  ├─ initNTP() → processNTP() round-robin
-  ├─ resolveLocation()          ← 3-tier geo lookup
+  ├─ initNTP() → processNTP() round-robin (max 15 servers)
+  ├─ resolveLocation()          ← 3-tier geo lookup (ipip → B站 → 乐视)
   ├─ fetchWeather()             ← /v7/weather/now
   ├─ fetchDaily()               ← /v7/weather/3d
   ├─ fetchHourly()              ← /v7/weather/24h
@@ -229,9 +224,11 @@ uiTask (Core 1) loop:
 
 ## 5. Module Reference
 
-### 5.1 Configuration Constants ([src/config.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/config.h))
+### 5.1 Configuration Constants ([config.h.template](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/config.h.template))
 
 Central definition file for all hardware pins, screen layout coordinates, interval timers, and RGB565 colour constants.
+
+> **Important:** `config.h` is gitignored. Copy `config.h.template` → `config.h` and fill in your sensitive values.
 
 **Network settings**:
 
@@ -256,6 +253,37 @@ Central definition file for all hardware pins, screen layout coordinates, interv
 
 **Screen dimensions & layout**: All `#define` constants in config.h map fixed pixel positions for each section (status bar, weather, clock, details, chart). See [Screen Layout](#44-screen-layout) for visual reference.
 
+| Macro | Value | Description |
+|-------|-------|-------------|
+| `SCREEN_W` | 240 | Screen width |
+| `SCREEN_H` | 240 | Screen height |
+| `PAD_LEFT` | 8 | Left padding for content |
+| `PAD_RIGHT` | 8 | Right padding for content |
+| `CONTENT_W` | 224 | Content area width |
+| `STATUS_Y` | 2 | Status bar Y start |
+| `STATUS_H` | 14 | Status bar height |
+| `WEATHER_Y` | 20 | Weather section Y start |
+| `WEATHER_H` | 36 | Weather section height |
+| `CLOCK_Y` | 56 | Clock section Y start |
+| `CLOCK_H` | 58 | Clock section height |
+| `DETAIL_Y` | 124 | Detail section Y start |
+| `DETAIL_H` | 34 | Detail section height |
+| `CHART_Y` | 168 | Chart section Y start |
+| `CHART_H` | 66 | Chart section height |
+| `CHART_POINTS` | 7 | Number of hourly data points |
+| `CHART_COL_W` | 34 | Column width between chart points |
+| `CHART_PT_R` | 4 | Chart data point circle radius |
+| `HOUR_COUNT` | 7 | Hourly data count (aligns with CHART_POINTS) |
+
+**Weather alert and minutely constants (defined in [weather.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/weather.h))**:
+
+| Macro | Value | Description |
+|-------|-------|-------------|
+| `WARNING_MAX` | 5 | Maximum number of weather alerts |
+| `MINUTELY_SLOTS` | 24 | Number of 5-minute precipitation slots (2 hours) |
+| `WARN_INTERVAL_MS` | 600000 (10 min) | Warning fetch interval |
+| `MINUTELY_INTERVAL_MS` | 600000 (10 min) | Minutely precip fetch interval |
+
 **RGB565 colour constants**:
 
 | Constant | Value | Usage |
@@ -279,14 +307,7 @@ Central definition file for all hardware pins, screen layout coordinates, interv
 | `WARN_COLOR_YELLOW` | `0xFFE0` | Moderate alert |
 | `WARN_COLOR_BLUE` | `0x001F` | Minor alert |
 
-**Refresh intervals**:
-
-| Macro | Value | Description |
-|-------|-------|-------------|
-| `WARN_INTERVAL_MS` | 600,000 (10 min) | Warning fetch interval |
-| `MINUTELY_INTERVAL_MS` | 600,000 (10 min) | Minutely precipitation fetch interval |
-
-### 5.2 Display Driver ([src/display.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/display.h) / [display.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/display.cpp))
+### 5.2 Display Driver ([display.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/display.h) / [display.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/display.cpp))
 
 Low-level screen initialisation and drawing primitives.
 
@@ -320,7 +341,7 @@ Low-level screen initialisation and drawing primitives.
 | > -80 dBm | 2 |
 | ≤ -80 dBm | 1 |
 
-### 5.3 Data & Network ([src/weather.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/weather.h) / [weather.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/weather.cpp))
+### 5.3 Data & Network ([weather.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/weather.h) / [weather.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/weather.cpp))
 
 Core module containing all data structure definitions, global variables, WiFi management, NTP synchronisation, geo-location resolution, and weather API requests.
 
@@ -395,7 +416,7 @@ Core module containing all data structure definitions, global variables, WiFi ma
 | `ntpServer[32]` | `char[]` | Current NTP server name |
 | `apName[24]` | `char[]` | AP hotspot name |
 | `apIP[16]` | `char[]` | AP IP address |
-| `bootTime` | `unsigned long` | Boot timestamp |
+| `bootTime` | `unsigned long` | Boot timestamp (`millis()`) |
 
 #### 5.3.2 Global Variables
 
@@ -419,23 +440,32 @@ extern volatile bool networkBusy;    // Network busy flag
 extern volatile bool weatherUpdated; // Weather update flag
 ```
 
+Additionally, static (file-scope) NTP state machine variables in weather.cpp:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `ntpServers[]` | `const char*[]` | 15 NTP server strings |
+| `ntpServerIdx` | `static int` | Current server index (-1 = inactive) |
+| `ntpCurServer` | `static const char*` | Current server name pointer |
+| `ntpSendMs` | `static unsigned long` | Timestamp of last NTP request |
+
 #### 5.3.3 API Functions
 
 **WiFi & persistent storage**:
 
 | Function | Description |
 |----------|-------------|
-| `initWiFiWithProvisioning()` | Load config from NVS, start WiFiManager |
-| `loadConfig()` | Read API Key / Host from NVS Preferences |
+| `initWiFiWithProvisioning()` | Load config from NVS, start WiFiManager captive portal |
+| `loadConfig()` | Read API Key / Host from NVS Preferences namespace `"weather"` |
 | `saveConfig(apiKey, host)` | Write API Key / Host to NVS Preferences |
 
 **NTP time synchronisation** — Non-blocking state machine with 15 servers:
 
 | Function | Description |
 |----------|-------------|
-| `initNTP()` | Initialise NTP sync (reset server index) |
+| `initNTP()` | Initialise NTP sync (reset server index, start with first server) |
 | `processNTP()` | Poll NTP state machine: check response / timeout / switch |
-| `advanceNtpServer()` | Advance to next NTP server in the list |
+| `advanceNtpServer()` | Advance to next NTP server in the list (internal) |
 
 NTP server list (in order of attempted use):
 1. `ntp.ntsc.ac.cn` (National Time Service Center, China)
@@ -443,21 +473,22 @@ NTP server list (in order of attempted use):
 3. `ntp1-5.tencent.com` (Tencent Cloud, 5 servers)
 4. `pool.ntp.org` (global pool, last resort)
 
-Each server is given 3 seconds (`NTP_PER_SERVER_MS`) to respond before advancing. If all 15 fail, `ntpTried` is set to `true`.
+Each server is given 3 seconds (`NTP_PER_SERVER_MS`) to respond before advancing. DNS resolution failure also triggers advance. If all 15 fail, `ntpTried` is set to `true` with reason `"all servers failed"`.
 
 **Geo-location resolution** — 3-tier fallback:
 
 | Function | Description |
 |----------|-------------|
 | `resolveLocation()` | Auto-detect city via IP geolocation |
-| `setCityByName(cityName)` | Manually set city by name |
+| `setCityByName(cityName)` | Manually set city by name (used by config server) |
+| `lookupLocationId(searchCity)` | Query QWeather geo API to resolve city name → location ID (internal) |
 
 Resolution order:
-1. **ipip.net** — `myip.ipip.net/json` (primary)
-2. **Bilibili** — `api.live.bilibili.com` (fallback)
-3. **LeTV** — `g3.letv.com` (fallback)
+1. **ipip.net** — `myip.ipip.net/json` (primary, parses `data.location[2]` as city)
+2. **Bilibili** — `api.live.bilibili.com/xlive/web-room-v1/index/getIpInfo` (fallback 1)
+3. **LeTV** — `g3.letv.com/r?format=1` (fallback 2, parses hyphen-separated location string)
 
-If all fail, uses hardcoded `WEATHER_LOC` / `WEATHER_NAME`.
+If all fail, falls back to `WEATHER_LOC` / `WEATHER_NAME` defaults.
 
 **Weather API requests** — All use `httpGetJson()` with gzip decompression:
 
@@ -469,7 +500,7 @@ If all fail, uses hardcoded `WEATHER_LOC` / `WEATHER_NAME`.
 | `fetchWeatherWarnings()` | `/weatheralert/v1/current` | Active weather alerts |
 | `fetchMinutelyPrecipitation()` | `/v7/minutely/5m` | 2-hour precipitation forecast |
 
-All requests include the `X-QW-Api-Key` header for authentication.
+All requests include the `X-QW-Api-Key` header for authentication. `fetchWeather()` additionally truncates `weatherText` to 21 bytes (7 Chinese chars × 3 bytes) to fit the screen layout.
 
 #### 5.3.4 HTTP & gzip Decompression
 
@@ -478,19 +509,27 @@ All requests include the `X-QW-Api-Key` header for authentication.
 ```
 httpGetJson(url, withApiKey)
   │
-  ├─ HTTP GET (10s timeout, X-QW-Api-Key header)
-  ├─ Read raw response into buffer
+  ├─ HTTP GET (10s timeout, User-Agent & Accept headers, X-QW-Api-Key header)
+  ├─ Read raw response into dynamic buffer (5s stream timeout)
   ├─ Detect gzip magic bytes (0x1F 0x8B)
-  │    ├─ Not gzipped → return as plain string
+  │    ├─ Not gzipped → return as plain String
   │    └─ Gzipped → skip header fields (FEXTRA/FNAME/FCOMMENT/FHCRC)
   │                  └─ tinfl_decompress() deflate decompression
   │                     └─ Dynamic buffer expansion (realloc, double each pass)
   └─ Return decompressed JSON string
 ```
 
-Decompression uses the ESP32 ROM's miniz library (`esp32/rom/miniz.h`, `tinfl_decompress`).
+Decompression uses the ESP32 ROM's miniz library (`esp32/rom/miniz.h`, `tinfl_decompress` with `TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF` flag).
 
-### 5.4 UI Rendering ([src/ui.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/ui.h) / [ui.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/ui.cpp))
+The `skipGzipHeader()` function parses gzip flags (`FEXTRA`, `FNAME`, `FCOMMENT`, `FHCRC`) to locate the raw deflate stream, then passes it to `tinfl_decompress`.
+
+#### 5.3.5 URL Encoding
+
+`urlEncode(str)` — Custom URL encoder that percent-encodes non-alphanumeric characters. Used for geo-location lookup query parameters.
+
+---
+
+### 5.4 UI Rendering ([ui.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/ui.h) / [ui.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/ui.cpp))
 
 All page rendering logic, organised by page.
 
@@ -506,17 +545,17 @@ Assembled by `drawFullUI()`:
 | `drawWeatherSection()` | Weather icon + large temperature + city name + hi/lo temps |
 | `drawWeatherIcon(cx, cy, code)` | Draws weather icon by QWeather code: sun (100/150), cloud (101-104), rain (300-499), snow (500-599), overcast (default) |
 | `drawClockSection()` | Large HH:MM (textSize=5, cyan) + seconds (top-right) + date line |
-| `updateClockTime(h, m, s)` | Incremental clock update (no full redraw) |
-| `drawDetailSection()` | Two-row detail: feels-like + humidity (row 1), update time + wind (row 2) |
-| `drawHourlyChart()` | 7-point line chart with grid, interpolated lines, data points, labels |
+| `updateClockTime(h, m, s)` | Incremental clock update with background colour passthrough (no full redraw) |
+| `drawDetailSection()` | Two-row detail grid: feels-like + humidity (row 1), update time + wind dir/scale (row 2) |
+| `drawHourlyChart()` | 7-point line chart with dashed grid, interpolated fill lines, temperature polyline, data points, time labels |
 
 **`drawHourlyChart()`** rendering steps:
-1. Draw horizontal grid (3 dashed lines)
-2. Calculate Y coordinates from temperature range
-3. Draw vertical fill bars (grid colour to chart bottom)
-4. Draw temperature polyline (accent colour, linear interpolation)
-5. Draw data point circles (radius 4)
-6. Draw time labels (bottom) and temperature values
+1. Draw horizontal grid (3 dashed lines, dotted at 4px intervals)
+2. Calculate Y coordinates from temperature range (with 1-degree padding when min==max)
+3. Draw vertical fill bars (grid colour to chart bottom, linear interpolation)
+4. Draw temperature polyline (accent colour, linear interpolation between points)
+5. Draw data point circles (radius `CHART_PT_R` = 4)
+6. Draw time labels (bottom edge) and temperature values
 
 #### 5.4.2 Alert Page
 
@@ -524,10 +563,32 @@ Assembled by `drawFullUI()`:
 |----------|-------------|
 | `drawWarningPage()` | Full alert page: header bar, severity colour strip, headline, scrollable description, dot navigation |
 | `updateWarningScroll()` | Scroll description text by one line every 3 seconds |
+| `isWarningScrollNeeded()` | Returns whether the warning description exceeds viewport height |
 
-Scrolling is driven by static state variables (`warnScrollY`, `warnDescLineCount`, `warnScrollActive`). Text wrapping uses `wrapText16()` which handles CJK character widths.
+**Internal helper functions**:
 
-`severityColor()` maps severity strings to colours:
+| Function | Description |
+|----------|-------------|
+| `severityColor(sev)` | Maps severity string (`"extreme"` / `"severe"` / `"moderate"`) to warning colour |
+| `contrastColor(bgColor)` | Computes contrasting text colour (black or white) against a given background RGB565 colour using luminance weighting (R×299 + G×587 + B×114) |
+| `wrapText16(text, maxW)` | Wraps UTF-8 text to fit within `maxW` pixels. Each CJK char = 16px, ASCII = 8px. Inserts newline (`\n`) when width would be exceeded |
+| `truncateText16(text, maxPx)` | Truncates UTF-8 text with ellipsis (`...`) to fit within `maxPx` pixels. Leaves 24px for the `...` suffix |
+| `countLines(text)` | Returns number of lines by counting `\n` characters (+1) |
+| `splitLines(text, out[], &count)` | Splits a `\n`-delimited string into an array of line strings (max `MAX_WARN_LINES` = 30) |
+| `redrawDots(wi)` | Redraws dot navigation indicators below description. Active dot = filled circle (radius 3), others = smaller (radius 2) |
+| `redrawHeadline()` | Redraws the wrapped headline text section |
+| `drawDescLines(offsetY)` | Draws visible lines of the scrollable description, clipped to viewport area |
+
+**Scrolling mechanism**:
+- Driven by static state variables (`warnScrollY`, `warnDescLineCount`, `warnScrollActive`, `warnLastScrollMs`)
+- Text wrapping uses `wrapText16()` which handles CJK character widths
+- Scroll direction: upward, each scroll step = `WARN_LINE_H` (20px)
+- Interval: `WARN_SCROLL_DELAY` = 3000ms between scroll steps
+- When scroll reaches bottom, resets to top (wraparound)
+- Max description length: 400 characters (truncation in `drawWarningPage()`)
+- `MAX_WARN_LINES` = 30, `WARN_HEADLINE_Y` = 50, `WARN_DOT_Y` = 228
+
+`severityColor()` mapping:
 - `"extreme"` → `WARN_COLOR_RED` (0xF800)
 - `"severe"` → `WARN_COLOR_ORANGE` (0xFB00)
 - `"moderate"` → `WARN_COLOR_YELLOW` (0xFFE0)
@@ -537,28 +598,35 @@ Scrolling is driven by static state variables (`warnScrollY`, `warnDescLineCount
 
 | Function | Description |
 |----------|-------------|
-| `drawMinutelyPage()` | Full precipitation page: summary text + custom bar chart + statistics |
+| `drawMinutelyPage()` | Full precipitation page: header with city name + warning indicator, summary text, custom bar chart, statistics |
 
-Chart rendering:
-- X-axis: 24 slots spanning 2 hours
+**Chart rendering**:
+- X-axis: 24 slots spanning 2 hours (each slot = 5 minutes)
 - Y-axis: precipitation intensity, scaled to max value (minimum floor 0.5 mm)
-- 3-tier colour fill: light green (<0.5mm) → teal (0.5-2mm) → blue (>2mm)
-- Overlaid white polyline
-- Summary text at bottom: total precipitation and peak value
+- 3-tier colour fill:
+  - Light green (`0x04B0`) — < 0.5 mm
+  - Teal (`0x06BF`) — 0.5–2.0 mm
+  - Blue (`0x001F`) — > 2.0 mm
+- Overlaid white polyline connecting data points
+- Grid lines: 3 horizontal bands with Chinese labels ("小" / "中" / "大")
+- X-axis labels: "现在", "1小时后", "2小时后"
+- Summary statistics at bottom: total precipitation and peak value
 
 #### 5.4.4 System Info Page
 
 | Function | Description |
 |----------|-------------|
-| `drawSystemInfo()` | Full-screen diagnostic page with 4 sections |
+| `drawSystemInfo()` | Full-screen diagnostic page with 4 sections, dual-mode rendering |
 
-Sections:
+**Sections**:
 1. **ESP32** — Chip model, revision, flash size, free heap, uptime
 2. **WiFi** — SSID, IP, gateway, RSSI
 3. **NTP** — Sync status, server in use, current time
-4. **Weather API** — now/3d/24h status indicators
+4. **Weather API** — now/3d/24h status indicators + free memory
 
-First entry does a full `animateWipe()` + draw. Subsequent updates only refresh the uptime and NTP sections every second.
+**Dual-mode rendering**:
+- First entry (`systemInfoDirty == true`): Full `animateWipe()` + draw all sections (static content drawn once)
+- Subsequent updates (`systemInfoDirty == false`): Partial refresh — only updates uptime (y=298) and NTP/API status sections (y=350+) every second
 
 #### 5.4.5 Loading Animation
 
@@ -566,11 +634,15 @@ First entry does a full `animateWipe()` + draw. Subsequent updates only refresh 
 |----------|-------------|
 | `drawLoadingFrame(frame)` | 8-dot rotating loading indicator, displayed in the detail section area when `networkBusy` is true |
 
+Each frame updates a rotating pattern: one bright dot (`COLOR_CLOCK`), one dim dot (`COLOR_ACCENT`), and six invisible dots (`COLOR_LINE`). A "Loading" label appears below.
+
 #### 5.4.6 Text Helper
 
-`textWidth16()` — Calculates pixel width of a UTF-8 string when rendered in 16px Chinese font (CJK = 16px, ASCII = 8px). Used for layout positioning decisions.
+`textWidth16()` — Calculates pixel width of a UTF-8 string when rendered in 16px Chinese font (CJK = 16px, ASCII = 8px). Used for layout positioning decisions throughout the UI.
 
-### 5.5 Config Server ([src/config_server.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/config_server.h) / [config_server.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/config_server.cpp))
+---
+
+### 5.5 Config Server ([config_server.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/config_server.h) / [config_server.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/config_server.cpp))
 
 Lightweight HTTP configuration server based on `WebServer`, listening on port 80.
 
@@ -584,13 +656,17 @@ Lightweight HTTP configuration server based on `WebServer`, listening on port 80
 
 **Key implementation details**:
 
-- `handleRoot()` — Builds the page by concatenating PROGMEM string fragments with current values
+- `handleRoot()` — Builds the page by concatenating PROGMEM string fragments with current values (`weatherApiKey`, `weatherHost`, `weatherName`, `WiFi.localIP()`)
 - `handleSave()` — Validates non-empty `apiKey` and `host`, calls `saveConfig()`, resets `lastWeatherFetch = 0` to trigger immediate refresh
 - `handleSetCity()` — Validates non-empty city name, calls `setCityByName()`
 - Page pre-fills input fields with current `weatherApiKey` and `weatherHost` values
-- JavaScript `fetch()` API for async form submission with status feedback
+- JavaScript `fetch()` API for async form submission with real-time status feedback
+- HTML fragments stored in PROGMEM (`PAGE_HEAD`, `PAGE_MID`, `PAGE_TAIL`, `PAGE_END`) to conserve RAM
+- Server started once by `networkTask` when WiFi connects; `handleConfigClient()` called every loop iteration
 
-### 5.6 Chinese Font Library ([src/gb2312_font.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/gb2312_font.h))
+---
+
+### 5.6 Chinese Font Library ([gb2312_font.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/gb2312_font.h))
 
 Auto-generated GB2312-80 Level 1 bitmap font (including 01-09 symbol region), providing 16×16 pixel CJK character rendering.
 
@@ -600,7 +676,6 @@ Auto-generated GB2312-80 Level 1 bitmap font (including 01-09 symbol region), pr
 |--------|-------|
 | Characters | 4,437 (GB2312 Level 1 + symbols) |
 | Glyph data | 141,984 bytes (32 bytes per glyph: 16 rows × uint16_t) |
-| Mapping table | 17,748 bytes (4,437 × 4-byte entries) |
 | Storage | Flash (PROGMEM) |
 | Font source | Windows `simfang.ttf` (FangSong) |
 
@@ -623,9 +698,24 @@ Row 15:[bit15 bit14 ... bit0]
 ```
 Each bit represents one pixel: `1` = foreground colour, `0` = transparent/background.
 
-Non-CJK codepoints in certain ranges are explicitly allowed through (CJK symbols U+3000-303F, fullwidth forms U+FF00-FFEF, general punctuation U+2000-206F, etc.). All other non-CJK codepoints are skipped with a 16px advance.
+**Codepoint handling**:
+- ASCII (< 0x80): Rendered with TFT's built-in font (8px width)
+- CJK Unified Ideographs (U+4E00–U+9FFF): Looked up in glyph table via binary search
+- CJK Symbols (U+3000–303F): Allowed through
+- Fullwidth Forms (U+FF00–FFEF): Allowed through
+- General Punctuation (U+2000–206F): Allowed through
+- All other non-CJK codepoints: Skipped with 16px advance (space)
 
-### 5.7 Entry Point ([src/main.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/main.cpp))
+**Font generation** (see [tools/gen_gb2312_font.py](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/tools/gen_gb2312_font.py)):
+1. Iterate GB2312-80 encoding space (0xA1A1–0xD7FE), skip unused regions (0xAA–0xAF)
+2. Render each character at 4× size (64×64) using Pillow
+3. LANCZOS downscale to 16×16
+4. Threshold binarise (80/255)
+5. Output as PROGMEM array + binary-search mapping table (sorted by Unicode)
+
+---
+
+### 5.7 Entry Point ([main.cpp](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/main.cpp))
 
 System entry point responsible for initialisation and task creation.
 
@@ -636,9 +726,9 @@ System entry point responsible for initialisation and task creation.
 3. Mutex creation (`xSemaphoreCreateMutex()`)
 4. Display init (`initDisplay()`)
 5. Button config (GPIO 0, `INPUT_PULLUP`)
-6. Core 0 WDT disabled (`disableCore0WDT()` — network task may block)
+6. Core 0 WDT disabled (`disableCore0WDT()` — network task may block on WiFi)
 7. `networkTask` created on Core 0 (stack 8 KB, priority 1)
-8. 100ms delay for network task to start
+8. 100ms delay for network task to initialise
 9. Provisioning screen drawn if needed
 10. `uiTask` created on Core 1 (stack 8 KB, priority 2)
 11. Self-deletion (`vTaskDelete(NULL)`)
@@ -647,37 +737,45 @@ System entry point responsible for initialisation and task creation.
 
 ```
 1. If provisioning mode:
-   ├─ Process WiFiManager
-   ├─ On WiFi connected → exit provisioning mode
-   └─ On timeout (185s) → exit provisioning mode, fall back to STA
-2. If WiFi disconnected → reconnect every 5 seconds
-3. Start config server (one-time)
-4. Handle HTTP client requests
-5. Poll NTP state machine
-6. If NTP not synced and 30s elapsed → retry
-7. Resolve location (one-time)
-8. If NTP synced → daily timeClient update
-9. Every WEATHER_INTERVAL_MS → fetch all weather data
+   ├─ Process WiFiManager (wifiManager.process())
+   ├─ On WiFi connected → exit provisioning mode (set FALSE)
+   └─ On timeout (185s) → exit provisioning mode, fall back to WIFI_STA
+2. If WiFi disconnected → reconnect every 5 seconds (WiFi.reconnect())
+3. Start config server (one-time, when WiFi connects)
+4. Handle HTTP client requests (handleConfigClient())
+5. Poll NTP state machine (processNTP())
+6. If NTP not synced and 30s elapsed from last attempt → retry (initNTP())
+7. Resolve location (one-time, resolveLocation())
+8. If NTP synced → daily timeClient->update()
+9. Every WEATHER_INTERVAL_MS (30 min) → fetch all weather data
+   (fetchWeather → fetchDaily → fetchHourly → fetchWeatherWarnings)
 10. vTaskDelay(500ms)
 ```
 
 **`uiTask()` loop** (Core 1):
 
 ```
-1. Read button state
+1. Read button state from GPIO 0 (INPUT_PULLUP)
    ├─ Pressed → start timing
-   │   └─ If held ≥3s → reset WiFi & restart
-   └─ Released → on short press, page cycle:
-       Main → Alert → Minutely → System → Main
-2. If provisioning mode → show AP guide screen + animation
-3. If alert page → update scrolling
-4. If minutely page → refresh data if stale
-5. If system info page → update once per second
-6. If network busy → show loading animation
-7. If weather updated + 2s cooldown → full redraw
-8. Every second → update clock (HH:MM + seconds)
+   │   └─ If held ≥3s → draw progress ring → reset WiFi → ESP.restart()
+   └─ Released → on short press (<3s), page cycle:
+       Main → Alert(→ next alert) → Minutely → System → Main
+2. If provisioning mode → show AP guide screen + dot animation
+3. If alert page → update description scrolling (every 100ms)
+4. If minutely page → refresh data if stale (MINUTELY_INTERVAL_MS expired)
+5. If system info page → update uptime/NTP/API sections once per second
+6. If networkBusy → show rotating loading animation
+7. If weatherUpdated + 2s cooldown → full redraw (drawFullUI())
+8. Every second → update status bar time + clock (HH:MM + seconds)
 9. vTaskDelay(50ms)
 ```
+
+**Static helper functions in main.cpp**:
+
+| Function | Description |
+|----------|-------------|
+| `showBootScreen(title)` | Draw accent-coloured header bar with title text |
+| `showBootLine(y, text, color)` | Draw a single boot message line at given Y position |
 
 ---
 
@@ -707,11 +805,13 @@ Volatile flags (lock-free, atomic access)
 
 ### 6.2 Design Decisions
 
-- **Mutex protection**: All reads/writes to shared structures must acquire `dataMutex`. networkTask writes, uiTask reads.
-- **NTP state machine**: Non-blocking round-robin with 3-second per-server timeout. 15 servers total. All-fail state is explicitly tracked.
-- **gzip decompression**: Manual handling via `tinfl_decompress` from ESP32 ROM miniz. Output buffer doubles on each pass if decompressed data exceeds capacity.
-- **Incremental UI updates**: Clock and status bar redraw only changed pixels every second, avoiding full-screen flicker.
+- **Mutex protection**: All reads/writes to shared structures must acquire `dataMutex`. networkTask writes, uiTask reads. Both use `portMAX_DELAY` for blocking acquisition.
+- **NTP state machine**: Non-blocking round-robin with 3-second per-server timeout. 15 servers across 4 domains. DNS resolution failure triggers immediate advance. All-fail state explicitly tracked in `state.ntpTried`.
+- **gzip decompression**: Manual handling via `tinfl_decompress()` from ESP32 ROM miniz. Output buffer doubles on each pass (`realloc`) if decompressed data exceeds current capacity. Custom header-parsing logic (`skipGzipHeader()`) handles all gzip flag variants.
+- **Incremental UI updates**: Clock and status bar redraw only changed pixels every second using background-colour passthrough (`setTextColor(fg, bg)`), avoiding full-screen flicker.
 - **Weather text truncation**: `weatherText` truncated to 21 bytes (UTF-8 safe — 7 Chinese chars × 3 bytes) in `fetchWeather()` to fit screen layout constraints.
+- **System info dual-mode**: Static content drawn once on first entry; only uptime counter, NTP status, and API status are redrawn on subsequent ticks — marked by `state.systemInfoDirty`.
+- **Button debounce**: No explicit debounce — relies on 50ms task delay and GPIO 0 internal pull-up.
 
 ---
 
@@ -725,7 +825,7 @@ Volatile flags (lock-free, atomic access)
 | Alert | `showingWarning` | Main page short press | Multi-alert paging + scrolling description |
 | Minutely | `showingMinutely` | Alert page short press | Precipitation intensity chart + stats |
 | System | `showingSystemInfo` | Minutely page short press | Chip/WiFi/NTP/API diagnostics |
-| Provisioning | `provisioningMode` | Automatic on first boot | AP guide screen |
+| Provisioning | `provisioningMode` | Automatic on first boot | AP guide screen + waiting animation |
 
 ### 7.2 Page Transition Cycle
 
@@ -733,20 +833,22 @@ Volatile flags (lock-free, atomic access)
 Main Page
   │ short press ──→ Alert Page
   │                   │ short press ──→ Minutely Page
-  │                                    │ short press ──→ System Info Page
-  │                                                     │ short press ──→ back to Main
+  │                   │                   │ short press ──→ System Info Page
+  │                   │                   │                   │ short press ──→ back to Main
+  │ (multiple alerts) │
+  └───────────────────┘ If multiple alerts, successive short presses cycle
+                        through individual alerts (warningIndex++) before
+                        advancing to Minutely page.
 ```
-
-Within the Alert page, if multiple alerts exist, successive short presses cycle through individual alerts before advancing to the Minutely page.
 
 ### 7.3 Button Interaction
 
 | Action | Result |
 |--------|--------|
 | Short press BOOT (<3s) | Page cycle (as above) |
-| Long press BOOT (≥3s) | Reset WiFi credentials and restart |
+| Long press BOOT (≥3s) | Reset WiFi credentials (`wifiManager.resetSettings()`) and restart (`ESP.restart()`) |
 
-Long press is visualised with a 12-dot progress ring at the bottom of the screen. Each dot fills sequentially over 3 seconds.
+Long press is visualised with a 12-dot progress ring (`drawLongPressRing()`) at the bottom of the screen (cx=120, cy=218). Each dot fills sequentially over 3 seconds (12 dots ÷ 3s = 4 dots/s).
 
 ### 7.4 Web Configuration
 
@@ -754,7 +856,9 @@ When the device is connected to WiFi, visiting its IP address (port 80) opens th
 
 - Modify QWeather API Key and Host
 - Change city name (resolved via QWeather geo API)
-- AJAX async submission with real-time status feedback
+- AJAX async form submission with real-time status feedback
+- Dark-theme card-style UI with inline CSS
+- Pre-filled input fields with current configuration values
 
 ---
 
@@ -765,8 +869,8 @@ When the device is connected to WiFi, visiting its IP address (port 80) opens th
 | Library | Version | Purpose |
 |---------|---------|---------|
 | `Adafruit ST7735 and ST7789 Library` | latest | ST7789 TFT display driver |
-| `Adafruit GFX Library` | latest | Core graphics primitives |
-| `ArduinoJson` | ^7.0.0 | JSON response parsing |
+| `Adafruit GFX Library` | latest | Core graphics primitives (shapes, text, colours) |
+| `ArduinoJson` | ^7.0.0 | JSON response parsing (7.x API: `JsonDocument`, `deserializeJson`) |
 | `NTPClient` | latest | NTP time synchronisation |
 | `Adafruit BusIO` | latest | SPI communication support |
 | `WiFiManager` | latest | WiFi captive portal provisioning |
@@ -775,15 +879,15 @@ When the device is connected to WiFi, visiting its IP address (port 80) opens th
 
 | Component | Usage |
 |-----------|-------|
-| FreeRTOS | Task scheduling and mutex |
-| `esp32/rom/miniz.h` | gzip decompression (`tinfl_decompress`) |
-| `esp_task_wdt.h` | Task watchdog management |
-| `SPI.h` | Hardware SPI interface |
-| `WiFi.h` | WiFi connectivity |
-| `HTTPClient.h` | HTTP requests |
+| FreeRTOS | Task scheduling (`xTaskCreatePinnedToCore`), mutex (`xSemaphoreCreateMutex`) |
+| `esp32/rom/miniz.h` | gzip decompression (`tinfl_decompress`, `tinfl_init`, `TINFL_FLAG_*`) |
+| `esp_task_wdt.h` | Task watchdog management (`disableCore0WDT()`) |
+| `SPI.h` | Hardware SPI interface (`SPIClass`, `VSPI`) |
+| `WiFi.h` | WiFi connectivity (`WiFi.begin`, `WiFi.RSSI`, `WiFi.localIP()`, etc.) |
+| `HTTPClient.h` | HTTP requests (`HTTPClient`, `GET`, `getStreamPtr`) |
 | `WebServer.h` | HTTP server (config panel) |
-| `Preferences.h` | NVS key-value storage |
-| `time.h` | System time functions |
+| `Preferences.h` | NVS key-value storage (namespace `"weather"`) |
+| `time.h` | System time functions (`localtime`, `time_t`, `struct tm`) |
 
 ### 8.3 External Services
 
@@ -822,10 +926,10 @@ When the device is connected to WiFi, visiting its IP address (port 80) opens th
 
 1. Copy `src/config.h.template` → `src/config.h`
 2. Edit `src/config.h`: fill in `WEATHER_API_KEY` (register at [dev.qweather.com](https://dev.qweather.com))
-3. Build and upload
-4. Device boots → shows AP name on screen
+3. Build and upload (`pio run -t upload`)
+4. Device boots → shows AP name (`ESP32-Weather-XXXX`) on screen
 5. Connect phone to `ESP32-Weather-XXXX` Wi-Fi
-6. Phone browser opens config portal (or visit 192.168.4.1)
+6. Phone browser opens config portal (or visit `192.168.4.1`)
 7. Enter API Key, save
 8. Device connects to internet, syncs time, fetches weather
 
@@ -835,8 +939,8 @@ When the device is connected to WiFi, visiting its IP address (port 80) opens th
 - `WEATHER_API_KEY` — QWeather API key
 
 **Optional**:
-- `WEATHER_HOST` — `api.qweather.com` for production
-- `WEATHER_LOC` / `WEATHER_NAME` — Default city
+- `WEATHER_HOST` — `api.qweather.com` for production (vs `devapi.qweather.com` for dev)
+- `WEATHER_LOC` / `WEATHER_NAME` — Default city (fallback if geo resolution fails)
 
 > `config.h` is excluded from version control via `.gitignore` (pattern: `src/config.h`). Use `config.h.template` as a reference.
 
@@ -848,47 +952,12 @@ build_flags =
     -Os                     # Optimise for size
 ```
 
-`-Os` is critical — without size optimisation, the firmware may exceed the 4 MB flash partition.
+`-Os` is critical — without size optimisation, the firmware may exceed the 4 MB flash partition, especially with the ~142 KB font library.
 
----
+### 9.6 Partition Table
 
-## 10. Development Tools
-
-### 10.1 Font Generator — [tools/gen_gb2312_font.py](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/tools/gen_gb2312_font.py)
-
-Generates the GB2312 bitmap font C header from a Windows TTF font.
-
-**Process**:
-1. Iterate GB2312-80 encoding space (0xA1A1-0xD7FE), skip unused regions (0xAA-0xAF)
-2. Render each character at 4× size (64×64) using Pillow
-3. LANCZOS downscale to 16×16
-4. Threshold binarise (80/255)
-5. Output as PROGMEM array + binary-search mapping table (sorted by Unicode)
-
-**Running**:
-```bash
-cd tools
-pip install Pillow
-python gen_gb2312_font.py
-```
-Output: `src/gb2312_font.h`
-
-Requires `simfang.ttf` (方正仿宋) at `C:/Windows/Fonts/simfang.ttf`.
-
-### 10.2 Layout Simulation Test — [tools/test_weather_text_sim.py](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/tools/test_weather_text_sim.py)
-
-PC-side simulation of the ESP32 weather text truncation and layout logic. Tests 17 edge cases including:
-- UTF-8 byte-level truncation at 21-byte boundary
-- Chinese character width calculation vs available space
-- City name + weather description same-line/wrap decision
-- Edge cases: empty city, Latin city names, very long descriptions
-
-**Running**:
-```bash
-cd tools
-python test_weather_text_sim.py
+```ini
+board_build.partitions = huge_app.csv
 ```
 
-### 10.3 City Data — [tools/cities.json](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/tools/cities.json)
-
-Chinese province and city name data file, used by the font generator scripts as a character source.
+Uses the ESP32 `huge_app` partition scheme, which allocates the maximum possible space (~3 MB) for the application binary, necessary to accommodate the Chinese font data.
