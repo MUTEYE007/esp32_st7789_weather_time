@@ -149,3 +149,15 @@ void animateWipe() {
     vTaskDelay(30 / portTICK_PERIOD_MS);
   }
 }
+
+void drawWarnProgressBar(float progress) {
+  const int barW = CONTENT_W;
+  const int barH = 5;
+  const int barY = SCREEN_H - barH - 4;
+  const int barX = PAD_LEFT;
+  fillArea(barX, barY, barW, barH, COLOR_BG);
+  int activeW = (int)(barW * progress);
+  if (activeW > 0) {
+    fillArea(barX, barY, activeW, barH, COLOR_ACCENT);
+  }
+}

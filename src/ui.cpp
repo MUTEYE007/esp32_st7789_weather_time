@@ -709,10 +709,15 @@ void drawWarningPage() {
   uint16_t sColor = severityColor(warnings[wi].severity);
   uint16_t textColor = contrastColor(sColor);
   fillArea(PAD_LEFT, 24, CONTENT_W, 20, sColor);
-  drawGB16(PAD_LEFT + 4, 26, warnings[wi].eventName.c_str(), textColor, sColor);
+  int nameEndX = PAD_LEFT + 4;
+  drawGB16(nameEndX, 26, warnings[wi].eventName.c_str(), textColor, sColor);
+  nameEndX += textWidth16(warnings[wi].eventName.c_str()) + 4;
   if (warnings[wi].senderName.length() > 0) {
-    String truncated = truncateText16(warnings[wi].senderName, CONTENT_W - 80);
-    drawGB16(PAD_LEFT + 80, 26, truncated.c_str(), textColor, sColor);
+    int remainW = CONTENT_W - (nameEndX - PAD_LEFT);
+    if (remainW > 16) {
+      String truncated = truncateText16(warnings[wi].senderName, remainW);
+      drawGB16(nameEndX, 26, truncated.c_str(), textColor, sColor);
+    }
   }
 
   int maxW = CONTENT_W;

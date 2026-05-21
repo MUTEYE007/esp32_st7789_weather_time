@@ -13,3 +13,4 @@ void drawProvisioningScreen(const char *apName, const char *apIP);
 void updateProvisioningFrame(int frame);
 void drawLongPressRing(int cx, int cy, float progress);
 void animateWipe();
+void drawWarnProgressBar(float progress);

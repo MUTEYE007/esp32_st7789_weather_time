@@ -52,6 +52,13 @@ struct AppState {
   char apName[24];
   char apIP[16];
   unsigned long bootTime;
+
+  // Forced alert popup state
+  bool forceWarnActive;
+  unsigned long forceWarnStartMs;
+  bool savedShowingMinutely;
+  bool savedShowingSystemInfo;
+  int forceWarnShownCount;
 };
 
 struct WarningData {

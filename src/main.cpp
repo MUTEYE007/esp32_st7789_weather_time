@@ -162,7 +162,28 @@ void uiTask(void *pvParameters) {
         fillArea(SCREEN_W / 2 - 16, SCREEN_H - 36, 32, 32, COLOR_BG);
       }
       if (state.showingWarning) {
-        if (warningCount > 1 && state.warningIndex < warningCount - 1) {
+        if (state.forceWarnActive) {
+          state.forceWarnShownCount++;
+          if (state.forceWarnShownCount >= warningCount) {
+            state.forceWarnActive = false;
+            state.showingWarning = false;
+            state.showingMinutely = state.savedShowingMinutely;
+            state.showingSystemInfo = state.savedShowingSystemInfo;
+            if (state.showingMinutely) {
+              drawMinutelyPage();
+            } else if (state.showingSystemInfo) {
+              state.systemInfoDirty = true;
+              drawSystemInfo();
+            } else {
+              weatherUpdated = false;
+              drawFullUI();
+            }
+          } else {
+            state.warningIndex = state.forceWarnShownCount;
+            state.forceWarnStartMs = millis();
+            drawWarningPage();
+          }
+        } else if (warningCount > 1 && state.warningIndex < warningCount - 1) {
           state.warningIndex++;
           drawWarningPage();
         } else {
@@ -235,6 +256,36 @@ void uiTask(void *pvParameters) {
     }
 
     if (state.showingWarning) {
+      if (state.forceWarnActive) {
+        unsigned long elapsed = millis() - state.forceWarnStartMs;
+        if (elapsed >= 30000) {
+          state.forceWarnShownCount++;
+          if (state.forceWarnShownCount >= warningCount) {
+            state.forceWarnActive = false;
+            state.showingWarning = false;
+            state.showingMinutely = state.savedShowingMinutely;
+            state.showingSystemInfo = state.savedShowingSystemInfo;
+            if (state.showingMinutely) {
+              drawMinutelyPage();
+            } else if (state.showingSystemInfo) {
+              state.systemInfoDirty = true;
+              drawSystemInfo();
+            } else {
+              weatherUpdated = false;
+              drawFullUI();
+            }
+          } else {
+            state.warningIndex = state.forceWarnShownCount;
+            state.forceWarnStartMs = millis();
+            drawWarningPage();
+          }
+          vTaskDelay(100 / portTICK_PERIOD_MS);
+          continue;
+        } else {
+          float progress = 1.0f - (float)elapsed / 30000.0f;
+          drawWarnProgressBar(progress);
+        }
+      }
       updateWarningScroll();
       vTaskDelay(100 / portTICK_PERIOD_MS);
       continue;
@@ -285,6 +336,22 @@ void uiTask(void *pvParameters) {
       lastFullDraw = millis();
     }
 
+    if (warningCount == 0 && state.forceWarnShownCount > 0) {
+      state.forceWarnShownCount = 0;
+    }
+
+    if (!state.provisioningMode && !state.showingWarning && warningCount > state.forceWarnShownCount && warningCount > 0) {
+      state.forceWarnActive = true;
+      state.forceWarnStartMs = millis();
+      state.savedShowingMinutely = state.showingMinutely;
+      state.savedShowingSystemInfo = state.showingSystemInfo;
+      state.warningIndex = state.forceWarnShownCount;
+      state.showingWarning = true;
+      state.showingMinutely = false;
+      state.showingSystemInfo = false;
+      drawWarningPage();
+    }
+
     int curSec = -1, curMin = -1, curHour = -1;
     if (state.timeSynced) {
       time_t t = timeClient->getEpochTime();
@@ -332,6 +399,11 @@ void setup() {
   memset(state.apName, 0, sizeof(state.apName));
   memset(state.apIP, 0, sizeof(state.apIP));
   state.bootTime = millis();
+  state.forceWarnActive = false;
+  state.forceWarnStartMs = 0;
+  state.savedShowingMinutely = false;
+  state.savedShowingSystemInfo = false;
+  state.forceWarnShownCount = 0;
   weather.valid = false;
   hourly.valid = false;
 

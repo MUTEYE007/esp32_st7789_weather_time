@@ -21,4 +21,5 @@ Lib/
 __pycache__/
 *.pyc
 
-.vscode/
+.vscode
+tools/
