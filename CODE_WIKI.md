@@ -35,7 +35,7 @@
 - **Minute Precipitation** — 2-hour precipitation intensity chart (24 × 5-minute slots)
 - **System Diagnostic Page** — Chip info, WiFi/NTP/API status, memory & uptime
 - **Web Configuration** — On-device HTTP server for API Key and city settings
-- **Chinese Text Rendering** — Self-generated 16×16 dot-matrix GB2312 font (4,437 glyphs)
+- **Chinese Text Rendering** — Self-generated 16×16 dot-matrix GB2312 font (7,445 glyphs, full standard)
 - **FreeRTOS Dual-Core Architecture** — Network on Core 0, UI on Core 1
 
 ### Technology Stack
@@ -64,9 +64,12 @@ esp32_st7789_weather_time/
 │   ├── weather.h / weather.cpp   # Data structures, WiFi, NTP, API requests
 │   ├── ui.h / ui.cpp             # UI rendering (all pages)
 │   ├── config_server.h / config_server.cpp  # HTTP configuration server
-│   └── gb2312_font.h             # GB2312 level-1 bitmap font (~142 KB, auto-generated)
+│   └── gb2312_font.h             # GB2312-80 full bitmap font (~233 KB, auto-generated)
+├── tools/                        # Font generation tools
+│   └── gen_gb2312_font.py        # GB2312 font generator (7445 glyphs)
 ├── platformio.ini                # PlatformIO project configuration
-├── CODE_WIKI.md                  # This document — Code Wiki
+├── CODE_WIKI.md                  # This document — Code Wiki (EN)
+├── CODE_WIKI.zh-CN.md            # Code Wiki — 中文版
 └── README.md                     # Project README (user-friendly)
 ```
 
@@ -111,7 +114,7 @@ tft->setTextWrap(false);
 
 ### 3.4 Partition Table
 
-`board_build.partitions = huge_app.csv` — uses a custom partition table with a larger application slot to accommodate the ~142 KB font library.
+`board_build.partitions = huge_app.csv` — uses a custom partition table with a larger application slot to accommodate the ~233 KB font library.
 
 ---
 
@@ -668,16 +671,18 @@ Lightweight HTTP configuration server based on `WebServer`, listening on port 80
 
 ### 5.6 Chinese Font Library ([gb2312_font.h](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/src/gb2312_font.h))
 
-Auto-generated GB2312-80 Level 1 bitmap font (including 01-09 symbol region), providing 16×16 pixel CJK character rendering.
+Auto-generated **complete** GB2312-80 bitmap font (01–09 symbol region + 16–55 Level 1 hanzi + 56–87 Level 2 hanzi), providing 16×16 pixel CJK character rendering.
 
 **Specifications**:
 
 | Metric | Value |
 |--------|-------|
-| Characters | 4,437 (GB2312 Level 1 + symbols) |
-| Glyph data | 141,984 bytes (32 bytes per glyph: 16 rows × uint16_t) |
+| Characters | 7,445 (682 symbols + 3,755 L1 hanzi + 3,008 L2 hanzi) |
+| Glyph data | 238,240 bytes (32 bytes per glyph: 16 rows × uint16_t) |
+| Mapping table | 29,780 bytes (7,445 × 4-byte entries) |
 | Storage | Flash (PROGMEM) |
 | Font source | Windows `simfang.ttf` (FangSong) |
+| Verification | **100% match** vs Python `gb2312` codec (GB 2312-80 reference impl.) |
 
 **Core inline functions** (defined in the header):
 
@@ -706,12 +711,20 @@ Each bit represents one pixel: `1` = foreground colour, `0` = transparent/backgr
 - General Punctuation (U+2000–206F): Allowed through
 - All other non-CJK codepoints: Skipped with 16px advance (space)
 
-**Font generation** (see [tools/gen_gb2312_font.py](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/tools/gen_gb2312_font.py)):
-1. Iterate GB2312-80 encoding space (0xA1A1–0xD7FE), skip unused regions (0xAA–0xAF)
+**Font generation** (see [gen_gb2312_font.py](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/tools/gen_gb2312_font.py)):
+1. Iterate GB2312-80 full encoding space (0xA1A1–0xF7FE), skip unused region (0xAA–0xAF = zones 10–15)
 2. Render each character at 4× size (64×64) using Pillow
 3. LANCZOS downscale to 16×16
 4. Threshold binarise (80/255)
 5. Output as PROGMEM array + binary-search mapping table (sorted by Unicode)
+6. **Verify** against Python `gb2312` codec (see [verify_gb2312_font.py](file:///c:/Users/muteh/Documents/PlatformIO/Projects/esp32_st7789_weather_time/tools/verify_gb2312_font.py))
+
+**Running**:
+```bash
+cd tools
+python gen_gb2312_font.py         # regenerate the font header
+python verify_gb2312_font.py      # verify against the standard
+```
 
 ---
 
@@ -952,7 +965,7 @@ build_flags =
     -Os                     # Optimise for size
 ```
 
-`-Os` is critical — without size optimisation, the firmware may exceed the 4 MB flash partition, especially with the ~142 KB font library.
+`-Os` is critical — without size optimisation, the firmware may exceed the 4 MB flash partition, especially with the ~233 KB font library.
 
 ### 9.6 Partition Table
 
