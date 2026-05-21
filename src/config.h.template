@@ -1,0 +1,96 @@
+#pragma once
+
+// ===== SENSITIVE: fill in your own values, DO NOT commit this file =====
+#define WEATHER_API_KEY "your_qweather_api_key"
+#define WEATHER_HOST    "devapi.qweather.com"
+#define WEATHER_LOC     "101230101"
+#define WEATHER_NAME    "Fuzhou"
+#define WEATHER_INTERVAL_MS (30 * 60 * 1000)
+
+#define TFT_CS   5
+#define TFT_DC   16
+#define TFT_RST  17
+#define TFT_MOSI 23
+#define TFT_SCK  18
+
+#define BTN_PIN  0
+
+#define SCREEN_W 240
+#define SCREEN_H 240
+
+#define PAD_LEFT     8
+#define PAD_RIGHT    8
+#define CONTENT_W    (SCREEN_W - PAD_LEFT - PAD_RIGHT)
+
+#define STATUS_Y     2
+#define STATUS_H     14
+
+#define LINE1_Y      16
+#define WEATHER_Y    20
+#define WEATHER_H    36
+#define ICON_CX      28
+#define ICON_CY      35
+#define TEMP_X       56
+#define TEMP_Y       23
+#define HILO_X       180
+#define HILO_Y1      23
+#define HILO_Y2      39
+#define CITY_X       98
+#define CITY_Y       23
+
+#define CLOCK_Y      56
+#define CLOCK_H      58
+#define CLOCK_TEXT_Y 60
+#define SEC_X_OFFSET 6
+#define SEC_Y        79
+#define DATE_Y       100
+
+#define LINE3_Y      120
+#define DETAIL_Y     124
+#define DETAIL_H     34
+#define DETAIL_ROW1_Y 126
+#define DETAIL_ROW2_Y 142
+
+#define LINE4_Y      164
+#define CHART_Y      168
+#define CHART_H      66
+#define CHART_LABEL_Y 172
+#define CHART_LINE1_Y 188
+#define CHART_LINE2_Y 204
+#define CHART_LINE3_Y 220
+#define CHART_DATA_TOP 184
+#define CHART_DATA_BOT 220
+#define CHART_TEMP_Y  228
+#define CHART_START_X  20
+#define CHART_COL_W    34
+#define CHART_POINTS   7
+
+#define CHART_PT_R     4
+
+#define BAR_Y        236
+#define BAR_H        2
+
+#define HOUR_COUNT   7
+
+#define COLOR_BG       0x0824
+#define COLOR_PRIMARY  0xFFFF
+#define COLOR_CLOCK    0x5D9F
+#define COLOR_LABEL    0x8C14
+#define COLOR_MUTED    0x39C7
+#define COLOR_ACCENT   0x3C16
+#define COLOR_GREEN    0x25E3
+#define COLOR_AMBER    0xE526
+#define COLOR_LINE     0x10A4
+#define COLOR_GRID     0x0843
+#define COLOR_YELLOW   0xFFE0
+#define COLOR_CLOUD    0xBDD7
+#define COLOR_RAIN     0x4AEF
+#define COLOR_GOLD     0xFEA0
+
+#define WARN_COLOR_RED    0xF800
+#define WARN_COLOR_ORANGE 0xFB00
+#define WARN_COLOR_YELLOW 0xFFE0
+#define WARN_COLOR_BLUE   0x001F
+#define WARN_INTERVAL_MS  (10 * 60 * 1000)
+
+#define MINUTELY_INTERVAL_MS (10 * 60 * 1000)
