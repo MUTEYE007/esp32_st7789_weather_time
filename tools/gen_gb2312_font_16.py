@@ -27,14 +27,7 @@ def iter_gb2312_chars():
 def render_glyph(char, font):
     img = Image.new('L', (GLYPH_SIZE, GLYPH_SIZE), 255)
     draw = ImageDraw.Draw(img)
-
-    bbox = draw.textbbox((0, 0), char, font=font)
-    char_w = bbox[2] - bbox[0]
-    char_h = bbox[3] - bbox[1]
-
-    x_offset = (GLYPH_SIZE - char_w) // 2 - bbox[0]
-    y_offset = (GLYPH_SIZE - char_h) // 2 - bbox[1]
-    draw.text((x_offset, y_offset), char, font=font, fill=0)
+    draw.text((0, 0), char, font=font, fill=0)
 
     pixels = list(img.getdata())
     glyph = bytearray()
