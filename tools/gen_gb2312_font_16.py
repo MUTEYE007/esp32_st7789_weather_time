@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate 16x16 GB2312-80 dot-matrix font data using WenQuanYi Micro Hei.
+Generate 16x16 GB2312-80 dot-matrix font data using WenQuanYi Bitmap Song 16px.
 Output format matches the original gb2312_font.h exactly.
 Usage: python gen_gb2312_font_16.py [--font FONT_PATH] [--font-size N]
 """
@@ -10,8 +10,8 @@ import sys
 import time
 from PIL import Image, ImageDraw, ImageFont
 
-FONT_PATH = os.path.join(os.path.dirname(__file__), "wqy-microhei.ttc")
-FONT_SIZE = 13
+FONT_PATH = os.path.join(os.path.dirname(__file__), "wqy-bitmap-song-16px.ttf")
+FONT_SIZE = 16
 GLYPH_SIZE = 16
 
 def iter_gb2312_chars():
