@@ -22,4 +22,7 @@ __pycache__/
 *.pyc
 
 .vscode
-tools/
+tools/*.ttc
+tools/*.ttf
+tools/*.otf
+tools/*.otc
