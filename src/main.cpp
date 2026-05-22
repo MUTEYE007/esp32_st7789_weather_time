@@ -103,9 +103,9 @@ void networkTask(void *pvParameters) {
       fetchDaily();
       fetchHourly();
       fetchWeatherWarnings();
-      weatherUpdated = true;
       networkBusy = false;
       if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+        weatherUpdated = true;
         state.lastWeatherFetch = millis();
         xSemaphoreGive(dataMutex);
       }
@@ -134,6 +134,13 @@ void uiTask(void *pvParameters) {
   while (1) {
     unsigned long now = millis();
     int curBtn = digitalRead(BTN_PIN);
+
+    time_t cachedEpoch = 0;
+    struct tm cachedTm;
+    if (state.timeSynced) {
+      cachedEpoch = timeClient->getEpochTime();
+      localtime_r(&cachedEpoch, &cachedTm);
+    }
 
     if (curBtn == LOW) {
       if (lastBtnState == HIGH) {
@@ -301,11 +308,9 @@ void uiTask(void *pvParameters) {
     }
 
     if (state.showingSystemInfo) {
-      int curSec = -1;
+      int curSec;
       if (state.timeSynced) {
-        time_t t = timeClient->getEpochTime();
-        struct tm *ti = localtime(&t);
-        curSec = ti->tm_sec;
+        curSec = cachedTm.tm_sec;
       } else {
         curSec = (now / 1000) % 60;
       }
@@ -352,13 +357,11 @@ void uiTask(void *pvParameters) {
       drawWarningPage();
     }
 
-    int curSec = -1, curMin = -1, curHour = -1;
+    int curSec, curMin, curHour;
     if (state.timeSynced) {
-      time_t t = timeClient->getEpochTime();
-      struct tm *ti = localtime(&t);
-      curSec = ti->tm_sec;
-      curMin = ti->tm_min;
-      curHour = ti->tm_hour;
+      curSec = cachedTm.tm_sec;
+      curMin = cachedTm.tm_min;
+      curHour = cachedTm.tm_hour;
     } else {
       curSec = (now / 1000) % 60;
       curMin = (now / 60000) % 60;
@@ -378,32 +381,8 @@ void uiTask(void *pvParameters) {
 void setup() {
   Serial.begin(115200);
 
-  state.wifiConnected = false;
-  state.timeSynced = false;
-  state.ntpTried = false;
-  state.weatherLoaded = false;
-  state.locationResolved = false;
-  state.showingSystemInfo = false;
-  state.systemInfoDirty = true;
-  state.showingWarning = false;
-  state.showingMinutely = false;
-  state.hasActiveWarnings = false;
-  state.warningIndex = 0;
-  state.provisioningMode = false;
-  state.lastWeatherFetch = 0;
-  state.lastNtpAttempt = 0;
-  state.lastWarningFetch = 0;
-  state.lastMinutelyFetch = 0;
-  strcpy(state.ntpFailReason, "");
-  strcpy(state.ntpServer, "");
-  memset(state.apName, 0, sizeof(state.apName));
-  memset(state.apIP, 0, sizeof(state.apIP));
+  state = AppState{};
   state.bootTime = millis();
-  state.forceWarnActive = false;
-  state.forceWarnStartMs = 0;
-  state.savedShowingMinutely = false;
-  state.savedShowingSystemInfo = false;
-  state.forceWarnShownCount = 0;
   weather.valid = false;
   hourly.valid = false;
 

@@ -31,10 +31,14 @@ void fillArea(int x, int y, int w, int h, uint16_t color) {
   tft->fillRect(x, y, w, h, color);
 }
 
+static const int RSSI_EXCELLENT = -50;
+static const int RSSI_GOOD      = -65;
+static const int RSSI_FAIR      = -80;
+
 void drawWiFiBars(int x, int y, bool connected) {
   if (connected) {
     int rssi = WiFi.RSSI();
-    int bars = rssi > -50 ? 4 : rssi > -65 ? 3 : rssi > -80 ? 2 : 1;
+    int bars = rssi > RSSI_EXCELLENT ? 4 : rssi > RSSI_GOOD ? 3 : rssi > RSSI_FAIR ? 2 : 1;
     for (int i = 0; i < 4; i++) {
       int bx = x + i * 5;
       int bh = 3 + i * 3;
@@ -124,18 +128,19 @@ void updateProvisioningFrame(int frame) {
   }
 }
 
+static const int LONG_PRESS_DOT_COUNT = 12;
+static const int LONG_PRESS_RADIUS    = 10;
+static const int LONG_PRESS_DOT_R     = 3;
+
 void drawLongPressRing(int cx, int cy, float progress) {
-  const int DOT_COUNT = 12;
-  const int RADIUS = 10;
-  const int DOT_R = 3;
-  int filled = (int)(progress * DOT_COUNT);
-  if (filled > DOT_COUNT) filled = DOT_COUNT;
-  for (int i = 0; i < DOT_COUNT; i++) {
-    float angle = (i * 360.0 / DOT_COUNT - 90) * 3.14159 / 180.0;
-    int dx = (int)(RADIUS * cos(angle));
-    int dy = (int)(RADIUS * sin(angle));
+  int filled = (int)(progress * LONG_PRESS_DOT_COUNT);
+  if (filled > LONG_PRESS_DOT_COUNT) filled = LONG_PRESS_DOT_COUNT;
+  for (int i = 0; i < LONG_PRESS_DOT_COUNT; i++) {
+    float angle = (i * 360.0 / LONG_PRESS_DOT_COUNT - 90) * 3.14159 / 180.0;
+    int dx = (int)(LONG_PRESS_RADIUS * cos(angle));
+    int dy = (int)(LONG_PRESS_RADIUS * sin(angle));
     uint16_t c = (i < filled) ? COLOR_ACCENT : COLOR_LINE;
-    tft->fillCircle(cx + dx, cy + dy, DOT_R, c);
+    tft->fillCircle(cx + dx, cy + dy, LONG_PRESS_DOT_R, c);
   }
 }
 

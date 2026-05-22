@@ -188,7 +188,8 @@ void processNTP() {
 }
 
 static String urlEncode(String str) {
-  String encoded = "";
+  String encoded;
+  encoded.reserve(str.length() * 3);
   for (size_t i = 0; i < str.length(); i++) {
     char c = str.charAt(i);
     if (isAlphaNumeric(c) || c == '-' || c == '_' || c == '.' || c == '~') {
@@ -248,6 +249,7 @@ static String httpGetJson(const String &url, bool withApiKey) {
 
   int totalLen = http.getSize();
   if (totalLen <= 0) totalLen = 4096;
+  if (totalLen > 65536) totalLen = 65536;
 
   WiFiClient *stream = http.getStreamPtr();
   uint8_t *buf = (uint8_t *)malloc(totalLen + 4);
@@ -443,20 +445,21 @@ bool resolveLocation() {
   return false;
 }
 
-bool fetchWeather() {
+static bool fetchWeatherDoc(const char *path, JsonDocument &doc) {
   if (!state.wifiConnected) return false;
-
-  String url = "https://" + weatherHost + "/v7/weather/now?location="
-               + urlEncode(weatherLoc);
+  String url = "https://" + weatherHost + path + "?location=" + urlEncode(weatherLoc);
   String payload = httpGetJson(url, true);
   if (payload.length() == 0) return false;
-
-  JsonDocument doc;
   DeserializationError err = deserializeJson(doc, payload);
   if (err) return false;
-
   const char *code = doc["code"];
-  if (strcmp(code, "200") != 0) return false;
+  if (!code || strcmp(code, "200") != 0) return false;
+  return true;
+}
+
+bool fetchWeather() {
+  JsonDocument doc;
+  if (!fetchWeatherDoc("/v7/weather/now", doc)) return false;
 
   JsonObject now = doc["now"];
   if (now.isNull()) return false;
@@ -481,17 +484,8 @@ bool fetchWeather() {
 }
 
 void fetchHourly() {
-  if (!state.wifiConnected) return;
-
-  String url = "https://" + weatherHost + "/v7/weather/24h?location="
-               + urlEncode(weatherLoc);
-  String payload = httpGetJson(url, true);
-  if (payload.length() == 0) { hourly.valid = false; return; }
-
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, payload);
-  if (err) { hourly.valid = false; return; }
-  if (strcmp(doc["code"], "200") != 0) { hourly.valid = false; return; }
+  if (!fetchWeatherDoc("/v7/weather/24h", doc)) { hourly.valid = false; return; }
 
   JsonArray arr = doc["hourly"].as<JsonArray>();
   int count = min((int)arr.size(), HOUR_COUNT);
@@ -512,17 +506,8 @@ void fetchHourly() {
 }
 
 void fetchDaily() {
-  if (!state.wifiConnected) return;
-
-  String url = "https://" + weatherHost + "/v7/weather/3d?location="
-               + urlEncode(weatherLoc);
-  String payload = httpGetJson(url, true);
-  if (payload.length() == 0) return;
-
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, payload);
-  if (err) return;
-  if (strcmp(doc["code"], "200") != 0) return;
+  if (!fetchWeatherDoc("/v7/weather/3d", doc)) return;
 
   if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
     weather.tempMax = doc["daily"][0]["tempMax"].as<String>();
@@ -537,20 +522,14 @@ void fetchWeatherWarnings() {
   String url = "https://" + weatherHost + "/weatheralert/v1/current/"
                + weatherLat + "/" + weatherLon + "?localTime=true";
   String payload = httpGetJson(url, true);
-  
-  Serial.printf("[Warning] Raw response (%d bytes): %s\n", payload.length(), payload.c_str());
-  
+
   if (payload.length() == 0) return;
 
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, payload);
-  if (err) {
-    Serial.printf("[Warning] JSON parse error: %s\n", err.c_str());
-    return;
-  }
+  if (err) return;
 
   JsonArray alerts = doc["alerts"].as<JsonArray>();
-  Serial.printf("[Warning] %d active warnings\n", (int)alerts.size());
 
   if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
     warningCount = 0;
@@ -564,12 +543,6 @@ void fetchWeatherWarnings() {
       warnings[i].senderName = a["senderName"].as<String>();
       warnings[i].valid = true;
       warningCount++;
-      
-      Serial.printf("  [%d] event=%s severity=%s\n", i, 
-                   warnings[i].eventName.c_str(), 
-                   warnings[i].severity.c_str());
-      Serial.printf("  headline=%s\n", warnings[i].headline.c_str());
-      Serial.printf("  desc=%s\n", warnings[i].description.c_str());
     }
     if (warningCount > 0 && state.warningIndex >= warningCount) {
       state.warningIndex = 0;
