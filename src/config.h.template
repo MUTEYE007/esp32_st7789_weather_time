@@ -87,7 +87,8 @@
 #define COLOR_YELLOW   0xFF2F
 #define COLOR_CLOUD    0x1948
 #define COLOR_RAIN     0x445F
-#define COLOR_GOLD     0xFEA8
+#define COLOR_GOLD       0xFEA8
+#define COLOR_PRECIP_SMALL 0x1ACF
 
 #define WARN_COLOR_RED    0xF8A8
 #define WARN_COLOR_ORANGE 0xFB60

@@ -71,7 +71,7 @@ void drawMinutelyPage() {
     uint16_t lineColor = COLOR_PRIMARY;
     uint16_t pointColor = COLOR_PRIMARY;
     uint16_t gridColor = COLOR_GRID;
-    uint16_t colorSmall = 0x1ACF;
+    uint16_t colorSmall = COLOR_PRECIP_SMALL;
     uint16_t colorMed  = 0x445F;
     uint16_t colorLarge = 0xE21F;
 
