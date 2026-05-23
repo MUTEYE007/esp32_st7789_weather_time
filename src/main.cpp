@@ -5,6 +5,7 @@
 #include "display.h"
 #include "weather.h"
 #include "ui.h"
+#include "page_manager.h"
 #include "config_server.h"
 
 static unsigned long lastWifiTry = 0;
@@ -166,57 +167,33 @@ void uiTask(void *pvParameters) {
 
     int curBtnShort = digitalRead(BTN_SHORT_PIN);
     if (curBtnShort == HIGH && lastBtnStateShort == LOW) {
-      if (state.showingWarning) {
-        if (state.forceWarnActive) {
-          state.forceWarnShownCount++;
-          if (state.forceWarnShownCount >= warningCount) {
-            state.forceWarnActive = false;
-            state.showingWarning = false;
-            state.showingMinutely = state.savedShowingMinutely;
-            state.showingSystemInfo = state.savedShowingSystemInfo;
-            if (state.showingMinutely) {
-              drawMinutelyPage();
-            } else if (state.showingSystemInfo) {
-              state.systemInfoDirty = true;
-              drawSystemInfo();
-            } else {
-              weatherUpdated = false;
-              drawFullUI();
-            }
-          } else {
-            state.warningIndex = state.forceWarnShownCount;
-            state.forceWarnStartMs = millis();
-            drawWarningPage();
-          }
-        } else if (warningCount > 1 && state.warningIndex < warningCount - 1) {
-          state.warningIndex++;
-          drawWarningPage();
-        } else {
-          state.showingWarning = false;
-          state.showingMinutely = true;
-          bool needsFetch = !minutely.valid || (millis() - state.lastMinutelyFetch) > MINUTELY_INTERVAL_MS;
-          drawMinutelyPage();
-          if (needsFetch) {
+      bool wasForceWarn = state.forceWarnActive;
+      bool leavingWarning = state.showingWarning;
+      pageNext();
+
+      switch (getCurrentPage()) {
+        case PAGE_WARNING:
+          warning_page::drawWarningPage();
+          break;
+        case PAGE_MINUTELY:
+          minutely_page::drawMinutelyPage();
+          if (wasForceWarn || leavingWarning || !minutely.valid ||
+              (millis() - state.lastMinutelyFetch) > MINUTELY_INTERVAL_MS) {
             fetchMinutelyPrecipitation();
-            if (state.showingMinutely) {
-              drawMinutelyPage();
+            if (getCurrentPage() == PAGE_MINUTELY) {
+              minutely_page::drawMinutelyPage();
             }
           }
-        }
-      } else if (state.showingMinutely) {
-        state.showingMinutely = false;
-        state.showingSystemInfo = true;
-        state.systemInfoDirty = true;
-        drawSystemInfo();
-      } else if (state.showingSystemInfo) {
-        state.showingSystemInfo = false;
-        weatherUpdated = false;
-        drawFullUI();
-        lastFullDraw = millis();
-      } else {
-        state.warningIndex = 0;
-        state.showingWarning = true;
-        drawWarningPage();
+          break;
+        case PAGE_SYSTEM_INFO:
+          state.systemInfoDirty = true;
+          system_page::drawSystemInfo();
+          break;
+        case PAGE_MAIN:
+          weatherUpdated = false;
+          main_page::drawFullUI();
+          lastFullDraw = millis();
+          break;
       }
     }
     lastBtnStateShort = curBtnShort;
@@ -270,35 +247,33 @@ void uiTask(void *pvParameters) {
     if (state.showingWarning) {
       if (state.forceWarnActive) {
         unsigned long elapsed = millis() - state.forceWarnStartMs;
-        if (elapsed >= 30000) {
-          state.forceWarnShownCount++;
-          if (state.forceWarnShownCount >= warningCount) {
-            state.forceWarnActive = false;
-            state.showingWarning = false;
-            state.showingMinutely = state.savedShowingMinutely;
-            state.showingSystemInfo = state.savedShowingSystemInfo;
-            if (state.showingMinutely) {
-              drawMinutelyPage();
-            } else if (state.showingSystemInfo) {
+        float progress = 1.0f - (float)elapsed / 30000.0f;
+        drawWarnProgressBar(progress);
+
+        if (isForceWarningExpired()) {
+          advanceOrDismissForceWarnings();
+          switch (getCurrentPage()) {
+            case PAGE_WARNING:
+              warning_page::drawWarningPage();
+              break;
+            case PAGE_MINUTELY:
+              minutely_page::drawMinutelyPage();
+              break;
+            case PAGE_SYSTEM_INFO:
               state.systemInfoDirty = true;
-              drawSystemInfo();
-            } else {
+              system_page::drawSystemInfo();
+              break;
+            case PAGE_MAIN:
               weatherUpdated = false;
-              drawFullUI();
-            }
-          } else {
-            state.warningIndex = state.forceWarnShownCount;
-            state.forceWarnStartMs = millis();
-            drawWarningPage();
+              main_page::drawFullUI();
+              lastFullDraw = millis();
+              break;
           }
           vTaskDelay(100 / portTICK_PERIOD_MS);
           continue;
-        } else {
-          float progress = 1.0f - (float)elapsed / 30000.0f;
-          drawWarnProgressBar(progress);
         }
       }
-      updateWarningScroll();
+      warning_page::updateWarningScroll();
       vTaskDelay(100 / portTICK_PERIOD_MS);
       continue;
     }
@@ -306,7 +281,7 @@ void uiTask(void *pvParameters) {
     if (state.showingMinutely) {
       if (minutely.valid && (millis() - state.lastMinutelyFetch) > MINUTELY_INTERVAL_MS) {
         fetchMinutelyPrecipitation();
-        drawMinutelyPage();
+        minutely_page::drawMinutelyPage();
       }
       vTaskDelay(100 / portTICK_PERIOD_MS);
       continue;
@@ -320,7 +295,7 @@ void uiTask(void *pvParameters) {
         curSec = (now / 1000) % 60;
       }
       if (curSec != infoLastSec) {
-        drawSystemInfo();
+        system_page::drawSystemInfo();
         infoLastSec = curSec;
       }
       vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -332,7 +307,7 @@ void uiTask(void *pvParameters) {
     }
 
     if (networkBusy) {
-      drawLoadingFrame(loadingFrame);
+      main_page::drawLoadingFrame(loadingFrame);
       loadingFrame = (loadingFrame + 1) % 8;
     }
 
@@ -342,7 +317,7 @@ void uiTask(void *pvParameters) {
         xSemaphoreGive(dataMutex);
       }
       uiReady = true;
-      drawFullUI();
+      main_page::drawFullUI();
       lastFullDraw = millis();
     }
 
@@ -350,16 +325,8 @@ void uiTask(void *pvParameters) {
       state.forceWarnShownCount = 0;
     }
 
-    if (!state.provisioningMode && !state.showingWarning && warningCount > state.forceWarnShownCount && warningCount > 0) {
-      state.forceWarnActive = true;
-      state.forceWarnStartMs = millis();
-      state.savedShowingMinutely = state.showingMinutely;
-      state.savedShowingSystemInfo = state.showingSystemInfo;
-      state.warningIndex = state.forceWarnShownCount;
-      state.showingWarning = true;
-      state.showingMinutely = false;
-      state.showingSystemInfo = false;
-      drawWarningPage();
+    if (tryStartForceWarnings()) {
+      warning_page::drawWarningPage();
     }
 
     int curSec, curMin, curHour;
@@ -375,8 +342,8 @@ void uiTask(void *pvParameters) {
 
     if (curSec != lastUiSec) {
       lastUiSec = curSec;
-      updateStatusTime();
-      updateClockTime(curHour, curMin, curSec);
+      main_page::updateStatusTime();
+      main_page::updateClockTime(curHour, curMin, curSec);
     }
 
     vTaskDelay(50 / portTICK_PERIOD_MS);

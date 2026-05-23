@@ -3,39 +3,41 @@
 #include <WiFi.h>
 #include <time.h>
 
+namespace main_page {
+
 static void drawCloudCluster(int cx, int cy, int r1, int cy1, int r2, int cy2, int r3, int cy3, int rx, int ry, int rw, int rh) {
-    tft->fillCircle(cx - 8, cy1, r1, COLOR_CLOUD);
-    tft->fillCircle(cx, cy2, r2, COLOR_CLOUD);
-    tft->fillCircle(cx + 8, cy3, r3, COLOR_CLOUD);
-    tft->fillRect(rx, ry, rw, rh, COLOR_CLOUD);
+    tft->fillCircle(cx - 8, cy1, r1, COLOR_WHITE);
+    tft->fillCircle(cx, cy2, r2, COLOR_WHITE);
+    tft->fillCircle(cx + 8, cy3, r3, COLOR_WHITE);
+    tft->fillRect(rx, ry, rw, rh, COLOR_WHITE);
 }
 
 void drawWeatherIcon(int cx, int cy, int code) {
     if (code == 100 || code == 150) {
-        tft->fillCircle(cx, cy, 10, COLOR_YELLOW);
-        tft->drawLine(cx, cy - 14, cx, cy - 18, COLOR_YELLOW);
-        tft->drawLine(cx, cy + 14, cx, cy + 18, COLOR_YELLOW);
-        tft->drawLine(cx - 14, cy, cx - 18, cy, COLOR_YELLOW);
-        tft->drawLine(cx + 14, cy, cx + 18, cy, COLOR_YELLOW);
-        tft->drawLine(cx - 10, cy - 10, cx - 13, cy - 13, COLOR_YELLOW);
-        tft->drawLine(cx + 10, cy + 10, cx + 13, cy + 13, COLOR_YELLOW);
-        tft->drawLine(cx + 10, cy - 10, cx + 13, cy - 13, COLOR_YELLOW);
-        tft->drawLine(cx - 10, cy + 10, cx - 13, cy + 13, COLOR_YELLOW);
+        tft->fillCircle(cx, cy, 10, COLOR_WHITE);
+        tft->drawLine(cx, cy - 14, cx, cy - 18, COLOR_WHITE);
+        tft->drawLine(cx, cy + 14, cx, cy + 18, COLOR_WHITE);
+        tft->drawLine(cx - 14, cy, cx - 18, cy, COLOR_WHITE);
+        tft->drawLine(cx + 14, cy, cx + 18, cy, COLOR_WHITE);
+        tft->drawLine(cx - 10, cy - 10, cx - 13, cy - 13, COLOR_WHITE);
+        tft->drawLine(cx + 10, cy + 10, cx + 13, cy + 13, COLOR_WHITE);
+        tft->drawLine(cx + 10, cy - 10, cx + 13, cy - 13, COLOR_WHITE);
+        tft->drawLine(cx - 10, cy + 10, cx - 13, cy + 13, COLOR_WHITE);
     } else if (code >= 101 && code <= 104) {
-        tft->fillCircle(cx - 10, cy + 2, 8, COLOR_CLOUD);
-        tft->fillCircle(cx, cy - 2, 10, COLOR_CLOUD);
-        tft->fillCircle(cx + 10, cy + 2, 8, COLOR_CLOUD);
-        tft->fillRect(cx - 10, cy - 2, 20, 14, COLOR_CLOUD);
+        tft->fillCircle(cx - 10, cy + 2, 8, COLOR_WHITE);
+        tft->fillCircle(cx, cy - 2, 10, COLOR_WHITE);
+        tft->fillCircle(cx + 10, cy + 2, 8, COLOR_WHITE);
+        tft->fillRect(cx - 10, cy - 2, 20, 14, COLOR_WHITE);
     } else if ((code >= 300 && code <= 399) || (code >= 400 && code <= 499)) {
         drawCloudCluster(cx, cy, 7, cy - 2, 9, cy - 5, 7, cy - 2, cx - 8, cy - 5, 16, 10);
-        tft->drawLine(cx - 8, cy + 8, cx - 10, cy + 14, COLOR_RAIN);
-        tft->drawLine(cx, cy + 8, cx - 2, cy + 14, COLOR_RAIN);
-        tft->drawLine(cx + 8, cy + 8, cx + 6, cy + 14, COLOR_RAIN);
+        tft->drawLine(cx - 8, cy + 8, cx - 10, cy + 14, COLOR_WHITE);
+        tft->drawLine(cx, cy + 8, cx - 2, cy + 14, COLOR_WHITE);
+        tft->drawLine(cx + 8, cy + 8, cx + 6, cy + 14, COLOR_WHITE);
     } else if (code >= 500 && code <= 599) {
         drawCloudCluster(cx, cy, 7, cy - 2, 9, cy - 5, 7, cy - 2, cx - 8, cy - 5, 16, 10);
-        tft->drawLine(cx - 8, cy + 8, cx - 8, cy + 12, COLOR_PRIMARY);
-        tft->drawLine(cx, cy + 8, cx, cy + 12, COLOR_PRIMARY);
-        tft->drawLine(cx + 8, cy + 8, cx + 8, cy + 12, COLOR_PRIMARY);
+        tft->drawLine(cx - 8, cy + 8, cx - 8, cy + 12, COLOR_WHITE);
+        tft->drawLine(cx, cy + 8, cx, cy + 12, COLOR_WHITE);
+        tft->drawLine(cx + 8, cy + 8, cx + 8, cy + 12, COLOR_WHITE);
     } else {
         drawCloudCluster(cx, cy, 8, cy, 10, cy - 3, 8, cy, cx - 8, cy - 3, 16, 11);
     }
@@ -327,3 +329,5 @@ void drawFullUI() {
     drawSectionLine(LINE4_Y);
     fillArea(0, BAR_Y, SCREEN_W, BAR_H, COLOR_ACCENT);
 }
+
+} // namespace main_page

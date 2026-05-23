@@ -1,6 +1,8 @@
 #include "ui.h"
 #include "ui_common.h"
 
+namespace minutely_page {
+
 void drawMinutelyPage() {
     animateWipe();
 
@@ -144,3 +146,5 @@ void drawMinutelyPage() {
     snprintf(buf, sizeof(buf), "总降水: %.1fmm  峰值: %.1fmm", totalPrecip, peakPrecip);
     drawGB16(PAD_LEFT, 218, buf, COLOR_PRIMARY, COLOR_BG);
 }
+
+} // namespace minutely_page

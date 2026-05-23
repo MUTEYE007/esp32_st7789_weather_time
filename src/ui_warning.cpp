@@ -1,11 +1,7 @@
 #include "ui.h"
 #include "ui_common.h"
 
-#define WARN_HEADLINE_Y   50
-#define WARN_SCROLL_DELAY 3000
-#define WARN_LINE_H       20
-#define WARN_DOT_Y        228
-#define MAX_WARN_LINES    30
+namespace warning_page {
 
 static int warnScrollY = 0;
 static int warnDescLineCount = 0;
@@ -220,3 +216,5 @@ void updateWarningScroll() {
     redrawHeadline();
     redrawDots(wi);
 }
+
+} // namespace warning_page

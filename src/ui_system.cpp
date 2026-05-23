@@ -3,6 +3,8 @@
 #include <WiFi.h>
 #include <time.h>
 
+namespace system_page {
+
 static const int SYS_LINE_H = 12;
 
 static void drawSysSection(int &y, const char *title) {
@@ -196,3 +198,5 @@ void drawSystemInfo() {
         tft->print("KB");
     }
 }
+
+} // namespace system_page
