@@ -25,13 +25,13 @@ input:focus{border-color:#5d9fcf}
 .status.error{display:block;background:#3a1a1a;color:#cf6f6f}
 .ip{text-align:center;margin-top:16px;font-size:12px;color:#556677}
 </style></head><body><div class="card"><h1>Weather Config</h1>
-<form id="cfg" onsubmit="return save()">
+<form id="cfg" onsubmit="save();return false">
 <div class="field"><label>API Key</label><input type="text" id="apiKey" value="%s" /></div>
 <div class="field"><label>Host</label><input type="text" id="host" value="%s" /></div>
 <button class="btn" type="submit">Save</button></form>
 <div id="status" class="status"></div>
 <div style="height:1px;background:#2a3a50;margin:20px 0"></div>
-<form onsubmit="return setCity()">
+<form onsubmit="setCity();return false">
 <div class="field"><label>City Name</label><input type="text" id="cityName" value="%s" placeholder="e.g. 福州" /></div>
 <button class="btn" type="submit" style="background:#1a5a3a">Set City</button></form>
 <div id="cityStatus" class="status"></div>
@@ -43,7 +43,7 @@ async function setCity(){const r=await fetch('/setcity',{method:'POST',headers:{
 )rawliteral";
 
 static void handleRoot() {
-  char buf[2048];
+  char buf[4096];
   snprintf_P(buf, sizeof(buf), PAGE_TEMPLATE,
     weatherApiKey.c_str(),
     weatherHost.c_str(),

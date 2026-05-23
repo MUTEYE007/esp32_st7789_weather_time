@@ -13,7 +13,8 @@
 #define TFT_MOSI 23
 #define TFT_SCK  18
 
-#define BTN_PIN  0
+#define BTN_LONG_PIN   0
+#define BTN_SHORT_PIN 13
 
 #define SCREEN_W 240
 #define SCREEN_H 240

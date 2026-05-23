@@ -124,7 +124,8 @@ void uiTask(void *pvParameters) {
   int loadingFrame = 0;
   int lastUiSec = -1;
   int infoLastSec = -1;
-  int lastBtnState = HIGH;
+  int lastBtnStateLong = HIGH;
+  int lastBtnStateShort = HIGH;
   bool uiReady = false;
   unsigned long lastFullDraw = 0;
   unsigned long btnPressStart = 0;
@@ -133,17 +134,10 @@ void uiTask(void *pvParameters) {
 
   while (1) {
     unsigned long now = millis();
-    int curBtn = digitalRead(BTN_PIN);
+    int curBtnLong = digitalRead(BTN_LONG_PIN);
 
-    time_t cachedEpoch = 0;
-    struct tm cachedTm;
-    if (state.timeSynced) {
-      cachedEpoch = timeClient->getEpochTime();
-      localtime_r(&cachedEpoch, &cachedTm);
-    }
-
-    if (curBtn == LOW) {
-      if (lastBtnState == HIGH) {
+    if (curBtnLong == LOW) {
+      if (lastBtnStateLong == HIGH) {
         btnPressStart = now;
         edgeGlowShown = false;
       } else {
@@ -165,8 +159,13 @@ void uiTask(void *pvParameters) {
         vTaskDelay(500 / portTICK_PERIOD_MS);
         ESP.restart();
       }
-    } else if (curBtn == HIGH && lastBtnState == LOW) {
+    } else if (curBtnLong == HIGH && lastBtnStateLong == LOW) {
       drawEdgeGlow(false);
+    }
+    lastBtnStateLong = curBtnLong;
+
+    int curBtnShort = digitalRead(BTN_SHORT_PIN);
+    if (curBtnShort == HIGH && lastBtnStateShort == LOW) {
       if (state.showingWarning) {
         if (state.forceWarnActive) {
           state.forceWarnShownCount++;
@@ -220,7 +219,14 @@ void uiTask(void *pvParameters) {
         drawWarningPage();
       }
     }
-    lastBtnState = curBtn;
+    lastBtnStateShort = curBtnShort;
+
+    time_t cachedEpoch = 0;
+    struct tm cachedTm;
+    if (state.timeSynced) {
+      cachedEpoch = timeClient->getEpochTime();
+      localtime_r(&cachedEpoch, &cachedTm);
+    }
 
     if (state.provisioningMode) {
       if (!provScreenDrawn) {
@@ -391,7 +397,8 @@ void setup() {
 
   initDisplay();
 
-  pinMode(BTN_PIN, INPUT_PULLUP);
+  pinMode(BTN_LONG_PIN, INPUT_PULLUP);
+  pinMode(BTN_SHORT_PIN, INPUT_PULLUP);
 
   disableCore0WDT();
 

@@ -11,7 +11,7 @@ void initDisplay() {
   vspi->begin(TFT_SCK, -1, TFT_MOSI, -1);
   tft = new Adafruit_ST7789(vspi, TFT_CS, TFT_DC, TFT_RST);
   tft->init(SCREEN_W, SCREEN_H);
-  tft->setRotation(1);
+  tft->setRotation(0);
   tft->fillScreen(COLOR_BG);
   tft->setTextWrap(false);
 }
