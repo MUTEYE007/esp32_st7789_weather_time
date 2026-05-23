@@ -68,12 +68,12 @@ void drawMinutelyPage() {
     }
     if (maxPrecip < 0.5) maxPrecip = 0.5;
 
-    uint16_t lineColor = 0xFFFF;
-    uint16_t pointColor = 0xFFFF;
-    uint16_t gridColor = 0x2104;
-    uint16_t colorSmall = 0x04B0;
-    uint16_t colorMed  = 0x06BF;
-    uint16_t colorLarge = 0x001F;
+    uint16_t lineColor = COLOR_PRIMARY;
+    uint16_t pointColor = COLOR_PRIMARY;
+    uint16_t gridColor = COLOR_GRID;
+    uint16_t colorSmall = 0x1ACF;
+    uint16_t colorMed  = 0x445F;
+    uint16_t colorLarge = 0xE21F;
 
     int py05 = chartBot - (int)(0.5f / maxPrecip * chartH);
     int py20 = chartBot - (int)(2.0f / maxPrecip * chartH);

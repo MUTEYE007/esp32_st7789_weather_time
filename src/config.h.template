@@ -73,25 +73,26 @@
 
 #define HOUR_COUNT   7
 
-#define COLOR_BG       0x0824
-#define COLOR_PRIMARY  0xFFFF
-#define COLOR_CLOCK    0x5D9F
-#define COLOR_LABEL    0x8C14
-#define COLOR_MUTED    0x39C7
-#define COLOR_ACCENT   0x3C16
-#define COLOR_GREEN    0x25E3
-#define COLOR_AMBER    0xE526
-#define COLOR_LINE     0x10A4
-#define COLOR_GRID     0x0843
-#define COLOR_YELLOW   0xFFE0
-#define COLOR_CLOUD    0xBDD7
-#define COLOR_RAIN     0x4AEF
-#define COLOR_GOLD     0xFEA0
+#define COLOR_BG       0x08A5
+#define COLOR_BG_ALT   0x08E6
+#define COLOR_PRIMARY  0xD79F
+#define COLOR_CLOCK    0x073F
+#define COLOR_LABEL    0x5C53
+#define COLOR_MUTED    0x3B4F
+#define COLOR_ACCENT   0xE21F
+#define COLOR_GREEN    0x6F95
+#define COLOR_AMBER    0xFD48
+#define COLOR_LINE     0x19AA
+#define COLOR_GRID     0x1148
+#define COLOR_YELLOW   0xFF2F
+#define COLOR_CLOUD    0x1948
+#define COLOR_RAIN     0x445F
+#define COLOR_GOLD     0xFEA8
 
-#define WARN_COLOR_RED    0xF800
-#define WARN_COLOR_ORANGE 0xFB00
-#define WARN_COLOR_YELLOW 0xFFE0
-#define WARN_COLOR_BLUE   0x001F
+#define WARN_COLOR_RED    0xF8A8
+#define WARN_COLOR_ORANGE 0xFB60
+#define WARN_COLOR_YELLOW 0xFF2F
+#define WARN_COLOR_BLUE   0x445F
 #define WARN_INTERVAL_MS  (10 * 60 * 1000)
 
 #define MINUTELY_INTERVAL_MS (10 * 60 * 1000)

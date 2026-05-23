@@ -128,9 +128,9 @@ void updateProvisioningFrame(int frame) {
   }
 }
 
-static const uint16_t GLOW_EDGE  = 0xFFE0;
-static const uint16_t GLOW_BAR   = 0xFB00;
-static const uint16_t GLOW_BORDER = 0xE526;
+static const uint16_t GLOW_EDGE  = 0x073F;
+static const uint16_t GLOW_BAR   = 0xE21F;
+static const uint16_t GLOW_BORDER = 0xA81F;
 
 void drawEdgeGlow(bool show) {
   uint16_t c = show ? GLOW_EDGE : COLOR_BG;
