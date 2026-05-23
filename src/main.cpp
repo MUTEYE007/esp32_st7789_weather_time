@@ -128,7 +128,7 @@ void uiTask(void *pvParameters) {
   bool uiReady = false;
   unsigned long lastFullDraw = 0;
   unsigned long btnPressStart = 0;
-  int lastBtnDots = -1;
+  bool edgeGlowShown = false;
   bool provScreenDrawn = false;
 
   while (1) {
@@ -145,14 +145,15 @@ void uiTask(void *pvParameters) {
     if (curBtn == LOW) {
       if (lastBtnState == HIGH) {
         btnPressStart = now;
-        lastBtnDots = -1;
+        edgeGlowShown = false;
       } else {
-        int dots = (now - btnPressStart) * 12 / 3000;
-        if (dots > 12) dots = 12;
-        if (dots != lastBtnDots) {
-          lastBtnDots = dots;
-          drawLongPressRing(SCREEN_W / 2, SCREEN_H - 22, dots / 12.0f);
-        }
+        float progress = (float)(now - btnPressStart) / 3000.0f;
+        if (progress > 1.0f) progress = 1.0f;
+        drawLongPressBar(progress);
+      }
+      if (!edgeGlowShown) {
+        drawEdgeGlow(true);
+        edgeGlowShown = true;
       }
       if ((now - btnPressStart) >= 3000) {
         fillArea(PAD_LEFT, 100, CONTENT_W, 20, COLOR_BG);
@@ -165,9 +166,7 @@ void uiTask(void *pvParameters) {
         ESP.restart();
       }
     } else if (curBtn == HIGH && lastBtnState == LOW) {
-      if ((now - btnPressStart) < 3000) {
-        fillArea(SCREEN_W / 2 - 16, SCREEN_H - 36, 32, 32, COLOR_BG);
-      }
+      drawEdgeGlow(false);
       if (state.showingWarning) {
         if (state.forceWarnActive) {
           state.forceWarnShownCount++;

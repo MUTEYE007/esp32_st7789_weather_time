@@ -11,6 +11,7 @@ void fillArea(int x, int y, int w, int h, uint16_t color);
 void drawWiFiBars(int x, int y, bool connected);
 void drawProvisioningScreen(const char *apName, const char *apIP);
 void updateProvisioningFrame(int frame);
-void drawLongPressRing(int cx, int cy, float progress);
+void drawEdgeGlow(bool show);
+void drawLongPressBar(float progress);
 void animateWipe();
 void drawWarnProgressBar(float progress);

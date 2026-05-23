@@ -128,19 +128,32 @@ void updateProvisioningFrame(int frame) {
   }
 }
 
-static const int LONG_PRESS_DOT_COUNT = 12;
-static const int LONG_PRESS_RADIUS    = 10;
-static const int LONG_PRESS_DOT_R     = 3;
+static const uint16_t GLOW_EDGE  = 0xFFE0;
+static const uint16_t GLOW_BAR   = 0xFB00;
+static const uint16_t GLOW_BORDER = 0xE526;
 
-void drawLongPressRing(int cx, int cy, float progress) {
-  int filled = (int)(progress * LONG_PRESS_DOT_COUNT);
-  if (filled > LONG_PRESS_DOT_COUNT) filled = LONG_PRESS_DOT_COUNT;
-  for (int i = 0; i < LONG_PRESS_DOT_COUNT; i++) {
-    float angle = (i * 360.0 / LONG_PRESS_DOT_COUNT - 90) * 3.14159 / 180.0;
-    int dx = (int)(LONG_PRESS_RADIUS * cos(angle));
-    int dy = (int)(LONG_PRESS_RADIUS * sin(angle));
-    uint16_t c = (i < filled) ? COLOR_ACCENT : COLOR_LINE;
-    tft->fillCircle(cx + dx, cy + dy, LONG_PRESS_DOT_R, c);
+void drawEdgeGlow(bool show) {
+  uint16_t c = show ? GLOW_EDGE : COLOR_BG;
+  fillArea(0, 0, SCREEN_W, 2, c);
+  fillArea(0, SCREEN_H - 2, SCREEN_W, 2, c);
+  fillArea(0, 2, 2, SCREEN_H - 4, c);
+  fillArea(SCREEN_W - 2, 2, 2, SCREEN_H - 4, c);
+}
+
+void drawLongPressBar(float progress) {
+  const int barW = CONTENT_W;
+  const int barH = 8;
+  const int barY = SCREEN_H - barH - 6;
+  const int barX = PAD_LEFT;
+  fillArea(barX, barY - 12, barW, barH + 16, COLOR_BG);
+  tft->setTextSize(1);
+  tft->setTextColor(GLOW_EDGE, COLOR_BG);
+  tft->setCursor(barX, barY - 10);
+  tft->print("Hold to reset WiFi...");
+  tft->drawRect(barX, barY, barW, barH, GLOW_BORDER);
+  int activeW = (int)(barW * progress);
+  if (activeW > 0) {
+    fillArea(barX, barY, activeW, barH, GLOW_BAR);
   }
 }
 
