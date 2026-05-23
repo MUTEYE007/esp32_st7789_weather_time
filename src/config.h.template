@@ -12,6 +12,7 @@
 #define TFT_RST  17
 #define TFT_MOSI 23
 #define TFT_SCK  18
+#define TFT_BL   22
 
 #define BTN_LONG_PIN   0
 #define BTN_SHORT_PIN 13
