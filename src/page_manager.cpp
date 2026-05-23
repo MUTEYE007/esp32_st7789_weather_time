@@ -1,12 +1,31 @@
 #include "page_manager.h"
 #include "config.h"
 
+static PageId savedBeforeDim = PAGE_MAIN;
+
 // ===== Querying =====
 PageId getCurrentPage() {
+    if (state.dimmingActive) return PAGE_BRIGHTNESS;
     if (state.showingWarning) return PAGE_WARNING;
     if (state.showingMinutely) return PAGE_MINUTELY;
     if (state.showingSystemInfo) return PAGE_SYSTEM_INFO;
+    if (state.showingHelp) return PAGE_HELP;
     return PAGE_MAIN;
+}
+
+// ===== Brightness page =====
+void enterBrightnessPage() {
+    savedBeforeDim = getCurrentPage();
+    state.dimmingActive = true;
+    state.showingWarning = false;
+    state.showingMinutely = false;
+    state.showingSystemInfo = false;
+    state.showingHelp = false;
+}
+
+void exitBrightnessPage() {
+    state.dimmingActive = false;
+    setCurrentPage(savedBeforeDim);
 }
 
 // ===== Page transitions =====
@@ -14,21 +33,19 @@ void setCurrentPage(PageId page) {
     state.showingWarning    = (page == PAGE_WARNING);
     state.showingMinutely   = (page == PAGE_MINUTELY);
     state.showingSystemInfo = (page == PAGE_SYSTEM_INFO);
+    state.showingHelp       = (page == PAGE_HELP);
 }
 
 void pageNext() {
     if (state.showingWarning) {
         if (state.forceWarnActive) {
-            // Force warning: advance or dismiss
             advanceOrDismissForceWarnings();
             return;
         }
         if (warningCount > 1 && state.warningIndex < warningCount - 1) {
-            // Manual next warning
             state.warningIndex++;
             return;
         }
-        // Warning → Minutely
         setCurrentPage(PAGE_MINUTELY);
         return;
     }
@@ -39,9 +56,12 @@ void pageNext() {
             state.systemInfoDirty = true;
             break;
         case PAGE_SYSTEM_INFO:
+            setCurrentPage(PAGE_HELP);
+            break;
+        case PAGE_HELP:
             setCurrentPage(PAGE_MAIN);
             break;
-        default: // PAGE_MAIN → Warning
+        default:
             state.warningIndex = 0;
             setCurrentPage(PAGE_WARNING);
             break;

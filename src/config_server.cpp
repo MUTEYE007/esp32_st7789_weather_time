@@ -1,205 +1,450 @@
 #include "config_server.h"
 #include "weather.h"
+#include "display.h"
+#include "page_manager.h"
 #include <WebServer.h>
 #include <WiFi.h>
+#include <time.h>
+#include <ArduinoJson.h>
 
 static WebServer server(80);
 static bool serverStarted = false;
 
-static const char PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+// ---- Template ----
+static const char PAGE_TEMPLATE[] = R"rawliteral(
+<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0a1628;color:#e0e0e0;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:20px}
-.card{background:#132238;border-radius:16px;padding:32px;width:100%%;max-width:600px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-h1{font-size:20px;color:#7ec8e3;margin-bottom:24px;text-align:center}
-.row{display:flex;gap:16px;flex-wrap:wrap}
-.row>*{flex:1;min-width:220px}
-label{display:block;font-size:13px;color:#8899aa;margin-bottom:6px}
-input{width:100%%;padding:12px 16px;border:1px solid #2a3a50;border-radius:10px;background:#0d1b2e;color:#fff;font-size:14px;outline:none;transition:border-color .2s}
-input:focus{border-color:#5d9fcf}
-.field{margin-bottom:18px}
-.btn{width:100%%;padding:12px;border:none;border-radius:10px;background:#2c6ea0;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
-.btn:hover{background:#3a8ac4}
-.btn:active{transform:scale(.98)}
-.btn.green{background:#1a5a3a}
-.btn.green:hover{background:#247a4e}
-.status{margin-top:16px;padding:10px;border-radius:8px;text-align:center;font-size:13px;display:none}
-.status.success{display:block;background:#1a3a2a;color:#6fcf97}
-.status.error{display:block;background:#3a1a1a;color:#cf6f6f}
-.ip{text-align:center;margin-top:16px;font-size:12px;color:#556677}
-.hr{height:1px;background:#2a3a50;margin:20px 0}
-.ipstat{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;padding:12px;background:rgba(0,0,0,.15);border-radius:10px}
-.ipstat>div{flex:1;min-width:100px;text-align:center}
-.ipstat .l{font-size:11px;color:#556677}
-.ipstat .v{font-size:16px;font-weight:600;color:#7ec8e3}
-</style></head><body><div class="card"><h1>ESP32 Weather Config</h1>
+@keyframes scan{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
+@keyframes glow{0%,100%{box-shadow:0 0 6px #e8c58022}50%{box-shadow:0 0 20px #e8c58044}}
+:root{--bg:#1a1a1a;--card:#242424;--border:#3a3a3a;--amber:#e8c580;--gold:#f5d998;--teal:#00bfa5;--mute:#8a7a6a;--bg2:#202020;--red:#e85a4f;--orange:#e8a04f;--fs:12px;--fs-s:10px;--fs-xs:8px;--fs-lg:14px;--p:16px;--gap:6px;--r:6px}
+@media(min-width:768px){:root{--fs:14px;--fs-s:12px;--fs-xs:10px;--fs-lg:18px;--p:28px;--gap:10px;--r:8px}}
+body{font-family:Georgia,'Times New Roman',serif;background:var(--bg);color:var(--amber);min-height:100vh;display:flex;justify-content:center;align-items:flex-start;margin:0;padding:var(--p);position:relative}
+body::before{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background:radial-gradient(ellipse at 50% 0%,#2a2a1a 0%,#1a1a1a 70%);z-index:-1}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:var(--p);width:100%;max-width:960px;position:relative;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+h1{font-family:Georgia,serif;font-size:var(--fs-lg);color:var(--gold);text-align:center;letter-spacing:3px;font-weight:400;margin-bottom:calc(var(--p) - 4px);animation:glow 3s infinite}
+.grid{display:grid;grid-template-columns:1fr;gap:var(--gap)}
+@media(min-width:768px){.grid{grid-template-columns:1fr 1fr}}
+@media(min-width:1024px){.grid{grid-template-columns:1fr 1fr 1fr}}
+.sec{margin-bottom:var(--gap)}
+.sec .t{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:1.5px;color:var(--mute);font-family:'Courier New',monospace;margin-bottom:4px;padding:3px 0 2px;border-bottom:1px solid var(--border)}
+.sc-span{grid-column:1 / -1}
+.dash{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+.dash>div{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:6px 8px}
+@media(min-width:768px){.dash>div{padding:8px 12px}}
+.dash .l{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:1px;color:var(--mute);font-family:'Courier New',monospace}
+.dash .v{font-size:var(--fs-s);color:var(--gold);font-family:'Courier New',monospace;word-break:break-all}
+.dash .v.g{color:var(--teal)}.dash .v.r{color:var(--red)}
+.s2{grid-column:span 2}
+.gr{display:flex;flex-direction:column;gap:var(--gap)}
+.gr>*{flex:none}
+.lb{display:block;font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:1px;color:var(--mute);font-family:'Courier New',monospace;margin-bottom:4px}
+.in{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--amber);font-size:var(--fs-s);font-family:'Courier New',monospace;outline:none;transition:border-color .2s}
+.in:focus{border-color:var(--teal)}
+@media(min-width:768px){.in{padding:9px 12px;font-size:var(--fs)}}
+.fld{margin-bottom:8px}
+.b{width:100%;padding:7px;border:1px solid var(--teal);border-radius:var(--r);background:linear-gradient(135deg,#00bfa522,#00bfa511);color:var(--teal);font-size:var(--fs-xs);font-family:'Courier New',monospace;text-transform:uppercase;letter-spacing:1.5px;cursor:pointer;transition:all .2s;user-select:none}
+.b:hover{background:linear-gradient(135deg,#00bfa544,#00bfa522);box-shadow:0 0 12px #00bfa533}
+.b:active{transform:scale(.97)}
+.b.r{border-color:var(--red)44;color:var(--red);background:linear-gradient(135deg,var(--red)22,var(--red)11)}
+.b.r:hover{border-color:var(--red)88;box-shadow:0 0 12px var(--red)44}
+@media(min-width:768px){.b{padding:9px;font-size:var(--fs-s);letter-spacing:2px}}
+.sel{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--amber);font-size:var(--fs-s);font-family:'Courier New',monospace;outline:none;cursor:pointer}
+.stel{display:flex;align-items:center;gap:var(--gap)}
+.st{margin-top:6px;padding:5px;border-radius:4px;text-align:center;font-size:var(--fs-xs);display:none;font-family:'Courier New',monospace}
+.st.ok{display:block;background:#00bfa511;color:var(--teal);border:1px solid #00bfa533}
+.st.er{display:block;background:var(--red)11;color:var(--red);border:1px solid var(--red)33}
+.bpres{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px}
+.bpres .b{padding:6px 0}
+.pg{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:4px}
+.pg .b{padding:6px 0;font-size:var(--fs-xs);letter-spacing:1px}
+.pg .b.ac{background:var(--teal);color:var(--card);border-color:var(--teal)}
+.navrow{display:flex;flex-wrap:wrap;gap:var(--gap);align-items:center}
+.navrow .lb2{font-size:var(--fs-xs);color:var(--mute);font-family:'Courier New',monospace;text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.ctrls{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;flex:1}
+.ctrls .b{font-size:var(--fs-xs);padding:6px 0;letter-spacing:1px}
+.wg{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0}
+.wg .wg-i{font-size:var(--fs-xs);padding:2px 6px;border-radius:3px;font-family:'Courier New',monospace;white-space:nowrap}
+.wg .wg-i.rd{background:var(--red)22;color:var(--red);border:1px solid var(--red)33}
+.wg .wg-i.or{background:var(--orange)22;color:var(--orange);border:1px solid var(--orange)33}
+.wg .wg-i.yl{background:#e8c58022;color:#e8c580;border:1px solid #e8c58033}
+.wg .wg-i.bl{background:#5a9fcf22;color:#5a9fcf;border:1px solid #5a9fcf33}
+.fc{display:flex;gap:6px;overflow-x:auto;padding:4px 0}
+.fc .fc-i{text-align:center;min-width:38px;padding:4px 2px;background:var(--bg2);border-radius:var(--r)}
+.fc .fc-i .t2{font-size:var(--fs-xs);color:var(--mute);font-family:'Courier New',monospace}
+.fc .fc-i .t1{font-size:var(--fs-s);color:var(--gold);font-family:'Courier New',monospace;font-weight:700}
+.gu{margin-top:var(--gap);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.gh{padding:7px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-s);text-transform:uppercase;letter-spacing:1.5px;color:var(--teal);user-select:none;background:var(--bg2);transition:background .2s;font-family:'Courier New',monospace}
+.gh:hover{background:#2a2a2a}.gh .a{color:var(--mute);font-size:7px;transition:transform .25s}
+.go .gh .a{transform:rotate(180deg)}.gb{padding:0 12px 8px;display:none}.go .gb{display:block}
+.gb table{width:100%;border-collapse:collapse;margin-top:5px;font-size:var(--fs-s)}
+.gb td{padding:3px 3px;border-bottom:1px solid var(--bg2);vertical-align:top;color:#9a8a7a;font-family:'Courier New',monospace}
+.gb td:first-child{color:var(--teal);white-space:nowrap;width:65px}
+.gb .sh{color:var(--mute);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:1.5px;padding:6px 0 2px;font-family:'Courier New',monospace}
+.foot{text-align:center;margin-top:8px;font-size:var(--fs-xs);color:var(--mute);letter-spacing:1px;font-family:'Courier New',monospace}
+.dbgs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.dbgs>span{font-size:var(--fs-xs);color:var(--mute);font-family:'Courier New',monospace;background:var(--bg2);padding:2px 6px;border-radius:3px}
+</style></head><body><div class="panel"><h1>ESP32 天气站</h1><div class="grid">
 
-<div class="ipstat">
-<div><div class="l">IP</div><div class="v">%s</div></div>
-<div><div class="l">WiFi</div><div class="v">%s</div></div>
-<div><div class="l">Weather</div><div class="v" style="color:%s">%s</div></div>
-</div>
+<div class="sc-span sec"><div class="t">设备状态</div>
+<div class="dash">
+<div class="s2"><div class="l">WiFi 网络</div><div class="v"><span id="wSsid">---</span> &nbsp; <span id="wMac">---</span></div></div>
+<div><div class="l">IP 地址</div><div class="v" id="wIp">%s</div></div>
+<div><div class="l">信号</div><div class="v" id="wRssi">%s</div></div>
+<div><div class="l">网关</div><div class="v" id="wGw">---</div></div>
+<div><div class="l">运行时长</div><div class="v" id="wUptime">---</div></div>
+<div><div class="l">天气</div><div class="v %s" id="wWth">%s</div></div>
+</div></div>
 
-<div class="row">
+<div class="sc-span sec"><div class="t">配置</div>
+<div class="gr">
 <div>
-<form id="cfg" onsubmit="save();return false">
-<div class="field"><label>API Key</label><input type="text" id="apiKey" value="%s" /></div>
-<div class="field"><label>Host</label><input type="text" id="host" value="%s" /></div>
-<button class="btn" type="submit">Save</button></form>
-<div id="status" class="status"></div>
+<div class="fld"><label class="lb">API 密钥</label><input class="in" type="text" id="apiKey" value="%s" /></div>
+<div class="fld"><label class="lb">接口地址</label><input class="in" type="text" id="host" value="%s" /></div>
+<button class="b" onclick="save()">保存</button><div id="st" class="st"></div>
 </div>
 <div>
-<form id="cityForm" onsubmit="setCity();return false">
-<div class="field"><label>City Name</label><input type="text" id="cityName" value="%s" placeholder="e.g. Fuzhou" /></div>
-<button class="btn green" type="submit">Set City</button></form>
-<div id="cityStatus" class="status"></div>
+<div class="fld"><label class="lb">城市名称</label><input class="in" type="text" id="cityName" value="%s" placeholder="如 福州" /></div>
+<button class="b r" onclick="setCity()" style="margin-bottom:4px">设置城市</button>
+<button class="b" onclick="doRefresh()">刷新天气</button>
+<div id="rfSt" class="st"></div><div id="ctSt" class="st"></div>
 </div>
+</div></div>
+
+<div class="sc-span sec"><div class="t">天气概况</div>
+<div id="wthContainer" style="display:none">
+<div class="dash" style="grid-template-columns:1fr 1fr 1fr">
+<div><div class="l">温度</div><div class="v" id="wTemp">--</div></div>
+<div><div class="l">体感</div><div class="v" id="wFeels">--</div></div>
+<div><div class="l">湿度</div><div class="v" id="wHumi">--</div></div>
+<div><div class="l">风向</div><div class="v" id="wWind">--</div></div>
+<div><div class="l">最高</div><div class="v" id="wTmax">--</div></div>
+<div><div class="l">最低</div><div class="v" id="wTmin">--</div></div>
+</div>
+<div class="fc" id="fcContainer"></div>
+<div id="warnContainer"></div>
+<div id="precipContainer"></div>
+</div>
+<div id="wthWaiting" style="color:var(--mute);font-size:var(--fs-s);font-family:'Courier New',monospace;text-align:center;padding:12px">等待天气数据...</div>
 </div>
 
-<div class="hr"></div>
-<div style="text-align:center">
-<button class="btn" style="width:auto;padding:10px 28px;display:inline-block" id="refreshBtn" onclick="doRefresh()">Refresh Weather</button>
-<div id="refreshStatus" class="status"></div>
+<div class="sec"><div class="t">亮度</div>
+<div class="stel">
+<div class="b" style="flex:0 0 36px;padding:7px 0" onclick="brightAdj(-16)">-</div>
+<div class="pv" id="brightVal" style="flex:1;text-align:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:7px 0;font-size:var(--fs-lg);font-weight:700;color:var(--gold);font-family:'Courier New',monospace">%d</div>
+<div class="b" style="flex:0 0 36px;padding:7px 0" onclick="brightAdj(16)">+</div>
 </div>
+<div class="bpres">
+<button class="b" onclick="brightSet(16)">16</button>
+<button class="b" onclick="brightSet(48)">48</button>
+<button class="b" onclick="brightSet(96)">96</button>
+<button class="b" onclick="brightSet(160)">160</button>
+<button class="b" onclick="brightSet(255)">255</button>
+</div></div>
 
-<div class="ip">%s</div>
+<div class="sec"><div class="t">远程页面控制</div>
+<div class="pg" id="pgBtns">
+<button class="b %s" onclick="setPg(0)">主页</button>
+<button class="b %s" onclick="setPg(1)">预警</button>
+<button class="b %s" onclick="setPg(2)">降水</button>
+<button class="b %s" onclick="setPg(3)">系统</button>
+<button class="b %s" onclick="setPg(4)">帮助</button>
+</div></div>
+
+<div class="sec"><div class="t">设备控制</div>
+<div class="navrow" style="margin-bottom:6px">
+<div class="lb2">旋转</div>
+<div class="ctrls">
+<button class="b" onclick="ctrl('rotate','0')">0&#xb0;</button>
+<button class="b" onclick="ctrl('rotate','1')">90&#xb0;</button>
+<button class="b" onclick="ctrl('rotate','2')">180&#xb0;</button>
+<button class="b" onclick="ctrl('rotate','3')">270&#xb0;</button>
+</div></div>
+<div class="navrow" style="margin-bottom:6px">
+<div class="lb2">间隔</div>
+<select class="sel" id="wIntervalSel" onchange="ctrl('winterval',this.value)" style="max-width:200px">
+<option value="300000">5 分钟</option>
+<option value="600000">10 分钟</option>
+<option value="900000">15 分钟</option>
+<option value="1800000" selected>30 分钟</option>
+<option value="3600000">60 分钟</option>
+</select></div>
+<div class="navrow">
+<button class="b" onclick="ctrl('wake','1')" style="flex:1;min-width:80px">唤醒</button>
+<button class="b r" onclick="ctrl('sleep','1')" style="flex:1;min-width:80px">熄屏</button>
+<button class="b r" onclick="if(confirm('确认重启?'))ctrl('reboot','1')" style="flex:1;min-width:80px">重启</button>
+</div></div>
+
+<div class="sc-span sec"><div class="t">调试信息</div>
+<div class="dbgs" id="dbgContainer"></div></div>
+
+<div class="sc-span gu" id="gu">
+<div class="gh" onclick="var p=this.parentNode;p.className=p.className.includes('gu go')?'gu':'gu go'"><span>设备指南</span><span class="a">&#9660;</span></div>
+<div class="gb">
+<div class="sh">按钮操作</div>
+<table><tr><td>BOOT</td><td>长按3秒重置所有配置</td></tr><tr><td>GPIO13</td><td>短按翻页 / 长按调光</td></tr></table>
+<div class="sh">页面说明</div>
+<table><tr><td>主页</td><td>天气 + 时钟 + 7小时预报</td></tr><tr><td>预警</td><td>气象预警自动弹窗</td></tr><tr><td>降水</td><td>未来2小时降水图</td></tr><tr><td>系统</td><td>设备状态 / WiFi / NTP</td></tr><tr><td>帮助</td><td>屏幕按键指南</td></tr></table>
+<div class="sh">首次使用</div>
+<table><tr><td>1.</td><td>长按 BOOT 3秒进配网模式</td></tr><tr><td>2.</td><td>手机连 ESP32 热点</td></tr><tr><td>3.</td><td>在此页填 API Key 和城市</td></tr><tr><td>4.</td><td>设备自动获取天气</td></tr></table>
+</div></div>
+
+</div><div class="foot">%s</div>
 <script>
-function stat(el,ok,msg){el.className='status '+(ok?'success':'error');el.textContent=msg;el.style.display='block'}
-function busy(btn,text){btn.disabled=1;btn.textContent=text}
-function ready(btn,text){btn.disabled=0;btn.textContent=text}
-
+var curPg=0, pct="%", deg="\u00b0";
+function $(id){return document.getElementById(id)}
+function F(v){if(v==undefined)return"--";return v}
+function sc(el,ok,m){el.className="st "+(ok?"ok":"er");el.textContent=m;el.style.display="block"}
 async function save(){
-  var btn=document.querySelector('#cfg button'),st=document.getElementById('status'),key=document.getElementById('apiKey').value,host=document.getElementById('host').value;
-  if(!key||!host){stat(st,0,'Fields cannot be empty');return}
-  busy(btn,'Saving...');stat(st,1,'Saving...');
-  try{
-    var r=await fetch('/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'apiKey='+encodeURIComponent(key)+'&host='+encodeURIComponent(host)});
-    var t=await r.text();
-    stat(st,r.ok,'Saved! Refetching weather...')
-  }catch(e){stat(st,0,'Network error: '+e.message)}
-  setTimeout(function(){st.style.display='none'},3000);
-  ready(btn,'Save')
-}
-
+  var k=$("apiKey").value,h=$("host").value,st=$("st"),btn=st.parentNode.querySelector(".b");
+  if(!k||!h){sc(st,0,"不能为空");return}
+  btn.disabled=1;btn.textContent="保存中";sc(st,1,"保存中");
+  try{var r=await fetch("/save",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"apiKey="+encodeURIComponent(k)+"&host="+encodeURIComponent(h)});sc(st,r.ok,r.ok?"已保存":"出错了")}catch(e){sc(st,0,"网络错误")}
+  setTimeout(function(){st.style.display="none"},3000);btn.disabled=0;btn.textContent="保存"}
 async function setCity(){
-  var btn=document.querySelector('#cityForm button'),st=document.getElementById('cityStatus'),city=document.getElementById('cityName').value;
-  if(!city){stat(st,0,'Enter a city name');return}
-  busy(btn,'Setting...');stat(st,1,'Resolving city...');
-  try{
-    var r=await fetch('/setcity',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'city='+encodeURIComponent(city)});
-    var t=await r.text();
-    if(r.ok){stat(st,1,'Resolved: '+city)}else{stat(st,0,'Failed: '+t)}
-  }catch(e){stat(st,0,'Network error: '+e.message)}
-  setTimeout(function(){st.style.display='none'},4000);
-  ready(btn,'Set City')
-}
-
+  var c=$("cityName").value,st=$("ctSt"),btn=st.parentNode.querySelector(".b");
+  if(!c){sc(st,0,"请输入城市");return}
+  btn.disabled=1;btn.textContent="设置中";sc(st,1,"解析中");
+  try{var r=await fetch("/setcity",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"city="+encodeURIComponent(c)});var t=await r.text();sc(st,r.ok,r.ok?"已解析: "+c:"失败: "+t)}catch(e){sc(st,0,"网络错误")}
+  setTimeout(function(){st.style.display="none"},4000);btn.disabled=0;btn.textContent="设置城市"}
 async function doRefresh(){
-  var btn=document.getElementById('refreshBtn'),st=document.getElementById('refreshStatus');
-  busy(btn,'Refreshing...');stat(st,1,'Requesting weather data...');
-  try{
-    var r=await fetch('/refresh',{method:'POST'});var t=await r.text();
-    if(r.ok){stat(st,1,'Refreshing, please wait...');setTimeout(function(){location.reload()},2000)}
-    else{stat(st,0,'Error: '+t)}
-  }catch(e){stat(st,0,'Network error')}
-  ready(btn,'Refresh Weather')
-}
+  var st=$("rfSt"),btn=st.parentNode.querySelector(".b");
+  btn.disabled=1;btn.textContent="刷新中";sc(st,1,"请求中");
+  try{var r=await fetch("/refresh",{method:"POST"});sc(st,r.ok,r.ok?"刷新完成":"出错了");if(r.ok)setTimeout(function(){location.reload()},2000)}catch(e){sc(st,0,"网络错误")}
+  btn.disabled=0;btn.textContent="刷新天气"}
+function brightAdj(d){
+  var v=parseInt($("brightVal").textContent)+d;if(v<1)v=1;if(v>255)v=255;
+  $("brightVal").textContent=v;fetch("/setbrightness",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"level="+v})}
+function brightSet(v){
+  $("brightVal").textContent=v;fetch("/setbrightness",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"level="+v})}
+async function setPg(n){
+  curPg=n;var b=document.querySelectorAll(".pg .b");for(var i=0;i<b.length;i++)b[i].className="b"+(i==n?" ac":"");
+  await fetch("/setpage",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"page="+n})}
+async function ctrl(a,v){
+  try{await fetch("/control",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"action="+a+"&val="+v})}catch(e){}
+  if(a=="reboot")setTimeout(function(){location.reload()},3000)}
+async function poll(){
+  try{var r=await fetch("/status");if(!r.ok)return;var d=await r.json();
+    $("wSsid").textContent=F(d.ssid);$("wMac").textContent=F(d.mac);
+    $("wIp").textContent=F(d.ip);$("wRssi").textContent=F(d.rssi)+" dBm";
+    $("wGw").textContent=F(d.gw);$("wUptime").textContent=F(d.uptime);
+    if(d.wok){$("wWth").textContent="正常";$("wWth").className="v g"}else{$("wWth").textContent="等待";$("wWth").className="v r"}
+    $("brightVal").textContent=d.bright;
+    if(d.page!=undefined&&d.page!=curPg){curPg=d.page;var b=document.querySelectorAll(".pg .b");for(var i=0;i<b.length;i++)b[i].className="b"+(i==d.page?" ac":"")}
+    if(d.temp!=undefined){$("wthContainer").style.display="block";$("wthWaiting").style.display="none";
+      $("wTemp").textContent=F(d.temp)+deg;$("wFeels").textContent=F(d.feels)+deg;
+      $("wHumi").textContent=F(d.humi)+pct;$("wWind").textContent=F(d.wind);
+      $("wTmax").textContent=F(d.tmax)+deg;$("wTmin").textContent=F(d.tmin)+deg;
+      var fc=$("fcContainer");fc.innerHTML="";
+      if(d.fc&&d.fc.length){for(var i=0;i<d.fc.length;i++){var x=d.fc[i];fc.innerHTML+="<div class=fc-i><div class=t2>"+F(x.h)+"</div><div class=t1>"+F(x.t)+deg+"</div></div>"}}
+      var wc=$("warnContainer");wc.innerHTML="";
+      if(d.wn&&d.wn.length){var m="";for(var i=0;i<d.wn.length;i++){var w=d.wn[i];var cl=w.s=="红色"?"rd":w.s=="橙色"?"or":w.s=="黄色"?"yl":"bl";m+="<span class=wg-i "+cl+">"+w.n+"</span>"}wc.innerHTML="<div class=wg>"+m+"</div>"}
+      var pc=$("precipContainer");pc.innerHTML="";
+      if(d.precip){pc.innerHTML="<div style=font-size:10px;color:var(--teal);font-family:Courier New,monospace;margin:2px 0>"+d.precip+"</div>"}
+    }else{$("wthContainer").style.display="none";$("wthWaiting").style.display="block"}
+    $("dbgContainer").innerHTML="<span>堆内存: "+F(d.heap)+"KB</span><span>NTP: "+(d.ntp?"已同步":"等待")+"</span><span>服务器: "+F(d.ntpS)+"</span><span>更新: "+F(d.wut)+"</span>";
+    if(d.wint)$("wIntervalSel").value=d.wint
+  }catch(e){console.log("poll err",e)}}
+setInterval(poll,5000);poll();
 </script></body></html>
 )rawliteral";
 
+// ---- Helpers ----
+static int pageIdToWeb(PageId p) {
+    switch (p) {
+        case PAGE_MAIN: return 0;
+        case PAGE_WARNING: return 1;
+        case PAGE_MINUTELY: return 2;
+        case PAGE_SYSTEM_INFO: return 3;
+        case PAGE_HELP: return 4;
+        default: return 0;
+    }
+}
+
+static String fmtUptime() {
+    unsigned long s = millis() / 1000;
+    char buf[32];
+    int h = s / 3600, m = (s % 3600) / 60, sec = s % 60;
+    if (h > 0) snprintf(buf, sizeof(buf), "%dh %02dm", h, m);
+    else if (m > 0) snprintf(buf, sizeof(buf), "%dm %02ds", m, sec);
+    else snprintf(buf, sizeof(buf), "%ds", sec);
+    return String(buf);
+}
+
+// ---- Route handlers ----
 static void handleRoot() {
-  char ipStr[16];
-  WiFi.localIP().toString().toCharArray(ipStr, sizeof(ipStr));
+    Serial.println("[WEB] GET /");
+    char ipStr[16], rssiStr[12];
+    WiFi.localIP().toString().toCharArray(ipStr, sizeof(ipStr));
+    snprintf(rssiStr, sizeof(rssiStr), "%d dBm", WiFi.RSSI());
 
-  char rssiStr[12];
-  int rssi = WiFi.RSSI();
-  snprintf(rssiStr, sizeof(rssiStr), "%d dBm", rssi);
+    const char *wthCls = weather.valid ? "g" : "r";
+    const char *wthTxt = weather.valid ? "正常" : "等待";
 
-  const char *wthColor;
-  const char *wthText;
-  if (weather.valid) {
-    wthColor = "#6fcf97";
-    wthText = "OK";
-  } else {
-    wthColor = "#e5a526";
-    wthText = "Waiting...";
-  }
+    PageId cur = getCurrentPage();
+    int wp = pageIdToWeb(cur);
+    char a0[4]="",a1[4]="",a2[4]="",a3[4]="",a4[4]="";
+    switch (wp) { case 0: strcpy(a0,"ac"); break; case 1: strcpy(a1,"ac"); break;
+                  case 2: strcpy(a2,"ac"); break; case 3: strcpy(a3,"ac"); break;
+                  case 4: strcpy(a4,"ac"); break; }
 
-  char buf[4096];
-  snprintf_P(buf, sizeof(buf), PAGE_TEMPLATE,
-    ipStr,
-    rssiStr,
-    wthColor,
-    wthText,
-    weatherApiKey.c_str(),
-    weatherHost.c_str(),
-    weatherName.c_str(),
-    ipStr
-  );
-  server.send(200, "text/html; charset=utf-8", buf);
+    char *buf = new char[32768];
+    int len = snprintf(buf, 32768, PAGE_TEMPLATE,
+        ipStr, rssiStr, wthCls, wthTxt,
+        weatherApiKey.c_str(), weatherHost.c_str(), weatherName.c_str(),
+        g_brightness,
+        a0, a1, a2, a3, a4, ipStr);
+    if (len >= 32768)
+        Serial.printf("[WEB] WARN: page truncated! need=%d, buf=%d\n", len + 1, 32768);
+    server.send(200, "text/html; charset=utf-8", buf);
+    Serial.printf("[WEB] GET / 200: %d bytes\n", len);
+    delete[] buf;
 }
 
 static void handleSave() {
-  if (!server.hasArg("apiKey") || !server.hasArg("host")) {
-    server.send(400, "text/plain", "Missing apiKey or host");
-    return;
-  }
-  String apiKey = server.arg("apiKey");
-  String host = server.arg("host");
-  apiKey.trim();
-  host.trim();
-  if (apiKey.length() == 0 || host.length() == 0) {
-    server.send(400, "text/plain", "Fields cannot be empty");
-    return;
-  }
-  saveConfig(apiKey, host);
-  if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
-    state.lastWeatherFetch = 0;
-    xSemaphoreGive(dataMutex);
-  }
-  server.send(200, "text/plain", "OK");
+    bool hasK = server.hasArg("apiKey"), hasH = server.hasArg("host");
+    String k = hasK ? server.arg("apiKey") : "";
+    String h = hasH ? server.arg("host") : "";
+    Serial.printf("[WEB] POST /save: hasApiKey=%d hasHost=%d apiKey=\"%s\" host=\"%s\"\n", hasK, hasH, k.c_str(), h.c_str());
+    if (!hasK || !hasH) { server.send(400, "text/plain", "Missing"); return; }
+    k.trim(); h.trim();
+    if (k.length() == 0 || h.length() == 0) { server.send(400, "text/plain", "Empty"); return; }
+    saveConfig(k, h);
+    if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) { state.lastWeatherFetch = 0; xSemaphoreGive(dataMutex); }
+    server.send(200, "text/plain", "OK");
 }
 
 static void handleSetCity() {
-  if (!server.hasArg("city")) {
-    server.send(400, "text/plain", "Missing city name");
-    return;
-  }
-  String city = server.arg("city");
-  city.trim();
-  if (city.length() == 0) {
-    server.send(400, "text/plain", "City name cannot be empty");
-    return;
-  }
-  if (setCityByName(city)) {
-    server.send(200, "text/plain", "OK");
-  } else {
-    server.send(400, "text/plain", "Failed to resolve city");
-  }
+    bool hasC = server.hasArg("city");
+    String c = hasC ? server.arg("city") : "";
+    Serial.printf("[WEB] POST /setcity: hasCity=%d city=\"%s\"\n", hasC, c.c_str());
+    if (!hasC) { server.send(400, "text/plain", "Missing city"); return; }
+    c.trim();
+    if (c.length() == 0) { server.send(400, "text/plain", "Empty"); return; }
+    bool ok = setCityByName(c);
+    server.send(ok ? 200 : 400, "text/plain", ok ? "OK" : "Failed");
 }
 
 static void handleRefresh() {
-  if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
-    state.lastWeatherFetch = 0;
-    state.lastMinutelyFetch = 0;
-    xSemaphoreGive(dataMutex);
-  }
-  server.send(200, "text/plain", "OK");
+    Serial.println("[WEB] POST /refresh");
+    if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+        state.lastWeatherFetch = 0; state.lastMinutelyFetch = 0;
+        xSemaphoreGive(dataMutex);
+    }
+    server.send(200, "text/plain", "OK");
 }
 
+static void handleBrightness() {
+    bool hasL = server.hasArg("level");
+    String lv = hasL ? server.arg("level") : "";
+    Serial.printf("[WEB] POST /setbrightness: hasLevel=%d level=\"%s\"\n", hasL, lv.c_str());
+    if (!hasL) { server.send(400, "text/plain", "Missing"); return; }
+    int l = constrain(lv.toInt(), 0, 255);
+    setBrightness((uint8_t)l);
+    Serial.printf("[WEB] POST /setbrightness: 200 level=%d\n", l);
+    server.send(200, "text/plain", "OK");
+}
+
+static void handleSetPage() {
+    bool hasP = server.hasArg("page");
+    String pv = hasP ? server.arg("page") : "";
+    Serial.printf("[WEB] POST /setpage: hasPage=%d page=\"%s\"\n", hasP, pv.c_str());
+    if (!hasP) { server.send(400, "text/plain", "Missing"); return; }
+    int p = constrain(pv.toInt(), 0, 4);
+    if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) { state.remotePage = (int8_t)p; xSemaphoreGive(dataMutex); }
+    server.send(200, "text/plain", "OK");
+}
+
+static void handleControl() {
+    String act = server.arg("action");
+    String val = server.arg("val");
+    Serial.printf("[WEB] POST /control: action=\"%s\" val=\"%s\"\n", act.c_str(), val.c_str());
+    if (act == "rotate") {
+        int r = constrain(val.toInt(), 0, 3);
+        if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) { state.pendingRotation = (int8_t)r; xSemaphoreGive(dataMutex); }
+        server.send(200, "text/plain", "OK");
+    } else if (act == "wake") {
+        setBrightness(255);
+        server.send(200, "text/plain", "OK");
+    } else if (act == "sleep") {
+        setBrightness(1);
+        server.send(200, "text/plain", "OK");
+    } else if (act == "winterval") {
+        uint32_t ms = (uint32_t)val.toInt();
+        if (ms < 60000) ms = 60000;
+        if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) { state.weatherIntervalMs = ms; xSemaphoreGive(dataMutex); }
+        server.send(200, "text/plain", "OK");
+    } else if (act == "reboot") {
+        server.send(200, "text/plain", "OK");
+        delay(500);
+        ESP.restart();
+    } else {
+        server.send(400, "text/plain", "Unknown action");
+    }
+}
+
+static void handleStatus() {
+    String json = "{";
+    json += "\"ip\":\"" + WiFi.localIP().toString() + "\"";
+    json += ",\"ssid\":\"" + WiFi.SSID() + "\"";
+    json += ",\"gw\":\"" + WiFi.gatewayIP().toString() + "\"";
+    json += ",\"mac\":\"" + WiFi.macAddress() + "\"";
+    json += ",\"rssi\":" + String(WiFi.RSSI());
+    json += ",\"uptime\":\"" + fmtUptime() + "\"";
+    json += ",\"wok\":" + String(weather.valid ? "true" : "false");
+    json += ",\"bright\":" + String(g_brightness);
+    json += ",\"page\":" + String(pageIdToWeb(getCurrentPage()));
+    json += ",\"heap\":" + String(ESP.getFreeHeap() / 1024);
+    json += ",\"ntp\":" + String(state.timeSynced ? "true" : "false");
+    json += ",\"ntpS\":\"" + String(state.ntpServer) + "\"";
+    json += ",\"wint\":" + String(state.weatherIntervalMs);
+    if (weather.valid) {
+        json += ",\"temp\":\"" + weather.temp + "\"";
+        json += ",\"feels\":\"" + weather.feelsLike + "\"";
+        json += ",\"humi\":\"" + weather.humidity + "\"";
+        json += ",\"wind\":\"" + weather.windDir + " " + weather.windScale + "级\"";
+        json += ",\"tmax\":\"" + weather.tempMax + "\"";
+        json += ",\"tmin\":\"" + weather.tempMin + "\"";
+        json += ",\"wut\":\"" + weather.updateTime + "\"";
+        json += ",\"fc\":[";
+        if (hourly.valid) {
+            for (int i = 0; i < 7; i++) {
+                if (i > 0) json += ",";
+                json += "{\"h\":\"" + hourly.hourLabel[i] + "\",\"t\":\"" + hourly.temp[i] + "\"}";
+            }
+        }
+        json += "]";
+        json += ",\"wn\":[";
+        for (int i = 0; i < warningCount; i++) {
+            if (i > 0) json += ",";
+            json += "{\"n\":\"" + warnings[i].eventName + "\",\"s\":\"" + warnings[i].severity + "\"}";
+        }
+        json += "]";
+        if (minutely.valid && minutely.summary.length() > 0) {
+            json += ",\"precip\":\"" + minutely.summary + "\"";
+        }
+    }
+    json += "}";
+    server.send(200, "application/json", json);
+}
+
+// ---- Lifecycle ----
 void startConfigServer() {
-  if (serverStarted) return;
-  server.on("/", handleRoot);
-  server.on("/save", HTTP_POST, handleSave);
-  server.on("/setcity", HTTP_POST, handleSetCity);
-  server.on("/refresh", HTTP_POST, handleRefresh);
-  server.begin();
-  serverStarted = true;
+    if (serverStarted) return;
+    server.on("/", handleRoot);
+    server.on("/save", HTTP_POST, handleSave);
+    server.on("/setcity", HTTP_POST, handleSetCity);
+    server.on("/refresh", HTTP_POST, handleRefresh);
+    server.on("/setbrightness", HTTP_POST, handleBrightness);
+    server.on("/setpage", HTTP_POST, handleSetPage);
+    server.on("/control", HTTP_POST, handleControl);
+    server.on("/status", handleStatus);
+    server.on("/wifi", handleStatus);
+    server.begin();
+    serverStarted = true;
+    Serial.printf("[WEB] Server started on %s:80\n", WiFi.localIP().toString().c_str());
 }
 
 void handleConfigClient() {
-  if (serverStarted) {
-    server.handleClient();
-  }
+    if (serverStarted) server.handleClient();
 }

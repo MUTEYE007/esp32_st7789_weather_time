@@ -1,10 +1,16 @@
 #pragma once
 
 #include <Adafruit_ST7789.h>
+#include <stdint.h>
 
 extern Adafruit_ST7789 *tft;
+extern uint8_t g_brightness;
 
 void initDisplay();
+void initBacklight();
+void setBrightness(uint8_t level);
+void setBrightnessFast(uint8_t level);
+void saveBrightness();
 void drawSectionLine(int y);
 void drawLabel(int x, int y, const char *text);
 void fillArea(int x, int y, int w, int h, uint16_t color);

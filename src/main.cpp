@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Preferences.h>
 #include <esp_task_wdt.h>
 #include "config.h"
 #include "display.h"
@@ -45,6 +46,8 @@ void networkTask(void *pvParameters) {
         if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
           state.provisioningMode = false;
           state.wifiConnected = true;
+          state.lastWeatherFetch = 0;
+          state.lastMinutelyFetch = 0;
           xSemaphoreGive(dataMutex);
         }
       } else if (millis() - state.bootTime > 185000) {
@@ -72,6 +75,8 @@ void networkTask(void *pvParameters) {
     if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
       if (!state.wifiConnected) {
         state.wifiConnected = true;
+        state.lastWeatherFetch = 0;
+        state.lastMinutelyFetch = 0;
       }
       xSemaphoreGive(dataMutex);
     }
@@ -97,17 +102,19 @@ void networkTask(void *pvParameters) {
       timeClient->update();
     }
 
-    if (state.timeSynced && state.wifiConnected &&
-        (now - state.lastWeatherFetch > WEATHER_INTERVAL_MS || state.lastWeatherFetch == 0)) {
+    if (state.wifiConnected &&
+        (now - state.lastWeatherFetch > state.weatherIntervalMs || state.lastWeatherFetch == 0)) {
       networkBusy = true;
-      fetchWeather();
+      bool ok = fetchWeather();
       fetchDaily();
       fetchHourly();
       fetchWeatherWarnings();
       networkBusy = false;
       if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
-        weatherUpdated = true;
-        state.lastWeatherFetch = millis();
+        if (ok) {
+          weatherUpdated = true;
+          state.lastWeatherFetch = millis();
+        }
         xSemaphoreGive(dataMutex);
       }
     }
@@ -122,16 +129,27 @@ void uiTask(void *pvParameters) {
   showBootLine(y, "Starting...", COLOR_LABEL);
   vTaskDelay(300 / portTICK_PERIOD_MS);
 
+  const unsigned long LONG_PRESS_MS = 500;
+  const int RAMP_INTERVAL_MS = 40;
+  const uint8_t BRIGHTNESS_MIN = 1;
+  const uint8_t BRIGHTNESS_MAX = 255;
+  const uint8_t RAMP_STEP = 3;
+
   int loadingFrame = 0;
   int lastUiSec = -1;
   int infoLastSec = -1;
   int lastBtnStateLong = HIGH;
-  int lastBtnStateShort = HIGH;
+  int lastBtnStateShort = LOW;
   bool uiReady = false;
   unsigned long lastFullDraw = 0;
   unsigned long btnPressStart = 0;
   bool edgeGlowShown = false;
   bool provScreenDrawn = false;
+  unsigned long shortBtnPressStart = 0;
+  bool rampActive = false;
+  int8_t rampDir = -1;
+  unsigned long lastRampTick = 0;
+  bool nextDirDown = true;
 
   while (1) {
     unsigned long now = millis();
@@ -155,7 +173,19 @@ void uiTask(void *pvParameters) {
         tft->setTextColor(COLOR_ACCENT);
         tft->setTextSize(1);
         tft->setCursor(PAD_LEFT, 100);
-        tft->print("Resetting WiFi...");
+        tft->print("Resetting all...");
+        {
+          Preferences prefs;
+          prefs.begin("display", false);
+          prefs.clear();
+          prefs.end();
+        }
+        {
+          Preferences prefs;
+          prefs.begin("weather", false);
+          prefs.clear();
+          prefs.end();
+        }
         wifiManager.resetSettings();
         vTaskDelay(500 / portTICK_PERIOD_MS);
         ESP.restart();
@@ -166,37 +196,149 @@ void uiTask(void *pvParameters) {
     lastBtnStateLong = curBtnLong;
 
     int curBtnShort = digitalRead(BTN_SHORT_PIN);
-    if (curBtnShort == HIGH && lastBtnStateShort == LOW) {
-      bool wasForceWarn = state.forceWarnActive;
-      bool leavingWarning = state.showingWarning;
-      pageNext();
 
-      switch (getCurrentPage()) {
+    if (curBtnShort == HIGH && lastBtnStateShort == LOW) {
+      shortBtnPressStart = now;
+      Serial.println("[BTN] IO13 pressed");
+    }
+
+    if (curBtnShort == HIGH) {
+      if (!rampActive && (now - shortBtnPressStart >= LONG_PRESS_MS)) {
+        if (g_brightness <= BRIGHTNESS_MIN && nextDirDown) {
+          rampDir = 1;
+          nextDirDown = false;
+        } else if (g_brightness >= BRIGHTNESS_MAX && !nextDirDown) {
+          rampDir = -1;
+          nextDirDown = true;
+        } else {
+          rampDir = nextDirDown ? -1 : 1;
+        }
+        rampActive = true;
+        lastRampTick = now;
+        enterBrightnessPage();
+        brightness_page::drawBrightnessPage();
+        Serial.printf("[BTN] Long press: ramp %s\n", rampDir < 0 ? "DOWN" : "UP");
+      }
+      if (rampActive && (now - lastRampTick >= RAMP_INTERVAL_MS)) {
+        lastRampTick = now;
+        int newB = g_brightness + rampDir * RAMP_STEP;
+        if (newB < BRIGHTNESS_MIN) newB = BRIGHTNESS_MIN;
+        if (newB > BRIGHTNESS_MAX) newB = BRIGHTNESS_MAX;
+        setBrightness((uint8_t)newB);
+        brightness_page::updateBrightnessBar(g_brightness, rampDir);
+      }
+    } else if (curBtnShort == LOW && lastBtnStateShort == HIGH) {
+      if (rampActive) {
+        rampActive = false;
+        nextDirDown = !nextDirDown;
+        Serial.printf("[BTN] Released: brightness=%d, next dir %s\n",
+          g_brightness, nextDirDown ? "DOWN" : "UP");
+      } else {
+        unsigned long heldMs = now - shortBtnPressStart;
+        Serial.printf("[BTN] Short press: held=%lums\n", heldMs);
+        if (state.dimmingActive) {
+          exitBrightnessPage();
+          PageId cur = getCurrentPage();
+          switch (cur) {
+            case PAGE_WARNING:
+              warning_page::drawWarningPage();
+              break;
+            case PAGE_MINUTELY:
+              minutely_page::drawMinutelyPage();
+              break;
+            case PAGE_SYSTEM_INFO:
+              state.systemInfoDirty = true;
+              system_page::drawSystemInfo();
+              break;
+            case PAGE_HELP:
+              help_page::drawHelpPage();
+              break;
+            default:
+              weatherUpdated = false;
+              main_page::drawFullUI();
+              lastFullDraw = millis();
+              break;
+          }
+        } else {
+          bool wasForceWarn = state.forceWarnActive;
+          bool leavingWarning = state.showingWarning;
+          pageNext();
+          switch (getCurrentPage()) {
+            case PAGE_WARNING:
+              warning_page::drawWarningPage();
+              break;
+            case PAGE_MINUTELY:
+              minutely_page::drawMinutelyPage();
+              if (wasForceWarn || leavingWarning || !minutely.valid ||
+                  (millis() - state.lastMinutelyFetch) > MINUTELY_INTERVAL_MS) {
+                fetchMinutelyPrecipitation();
+                if (getCurrentPage() == PAGE_MINUTELY) {
+                  minutely_page::drawMinutelyPage();
+                }
+              }
+              break;
+            case PAGE_SYSTEM_INFO:
+              state.systemInfoDirty = true;
+              system_page::drawSystemInfo();
+              break;
+            case PAGE_HELP:
+              help_page::drawHelpPage();
+              break;
+            case PAGE_MAIN:
+              weatherUpdated = false;
+              main_page::drawFullUI();
+              lastFullDraw = millis();
+              break;
+          }
+        }
+      }
+    }
+    lastBtnStateShort = curBtnShort;
+
+    if (state.remotePage >= 0) {
+      int8_t rp = state.remotePage;
+      state.remotePage = -1;
+      PageId target = PAGE_MAIN;
+      switch (rp) {
+        case 0: target = PAGE_MAIN; break;
+        case 1: target = PAGE_WARNING; break;
+        case 2: target = PAGE_MINUTELY; break;
+        case 3: target = PAGE_SYSTEM_INFO; break;
+        case 4: target = PAGE_HELP; break;
+      }
+      setCurrentPage(target);
+      switch (target) {
         case PAGE_WARNING:
           warning_page::drawWarningPage();
           break;
         case PAGE_MINUTELY:
           minutely_page::drawMinutelyPage();
-          if (wasForceWarn || leavingWarning || !minutely.valid ||
-              (millis() - state.lastMinutelyFetch) > MINUTELY_INTERVAL_MS) {
-            fetchMinutelyPrecipitation();
-            if (getCurrentPage() == PAGE_MINUTELY) {
-              minutely_page::drawMinutelyPage();
-            }
-          }
           break;
         case PAGE_SYSTEM_INFO:
           state.systemInfoDirty = true;
           system_page::drawSystemInfo();
           break;
-        case PAGE_MAIN:
+        case PAGE_HELP:
+          help_page::drawHelpPage();
+          break;
+        default:
           weatherUpdated = false;
           main_page::drawFullUI();
           lastFullDraw = millis();
           break;
       }
     }
-    lastBtnStateShort = curBtnShort;
+
+    if (state.pendingRotation >= 0) {
+      tft->setRotation(state.pendingRotation);
+      state.pendingRotation = -1;
+      PageId cur = getCurrentPage();
+      if (cur == PAGE_SYSTEM_INFO) { state.systemInfoDirty = true; system_page::drawSystemInfo(); }
+      else if (cur == PAGE_WARNING) warning_page::drawWarningPage();
+      else if (cur == PAGE_MINUTELY) minutely_page::drawMinutelyPage();
+      else if (cur == PAGE_HELP) help_page::drawHelpPage();
+      else { weatherUpdated = false; main_page::drawFullUI(); lastFullDraw = millis(); }
+    }
 
     time_t cachedEpoch = 0;
     struct tm cachedTm;
@@ -263,7 +405,10 @@ void uiTask(void *pvParameters) {
               state.systemInfoDirty = true;
               system_page::drawSystemInfo();
               break;
-            case PAGE_MAIN:
+            case PAGE_HELP:
+               help_page::drawHelpPage();
+               break;
+             case PAGE_MAIN:
               weatherUpdated = false;
               main_page::drawFullUI();
               lastFullDraw = millis();
@@ -302,6 +447,16 @@ void uiTask(void *pvParameters) {
       continue;
     }
 
+    if (state.showingHelp) {
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    if (state.dimmingActive) {
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+      continue;
+    }
+
     if (minutely.valid && (millis() - state.lastMinutelyFetch) > MINUTELY_INTERVAL_MS) {
       fetchMinutelyPrecipitation();
     }
@@ -325,7 +480,7 @@ void uiTask(void *pvParameters) {
       state.forceWarnShownCount = 0;
     }
 
-    if (tryStartForceWarnings()) {
+    if (!state.dimmingActive && tryStartForceWarnings()) {
       warning_page::drawWarningPage();
     }
 
@@ -354,6 +509,8 @@ void setup() {
   Serial.begin(115200);
 
   state = AppState{};
+  state.pendingRotation = -1;
+  state.weatherIntervalMs = WEATHER_INTERVAL_MS;
   state.bootTime = millis();
   weather.valid = false;
   hourly.valid = false;
@@ -365,12 +522,12 @@ void setup() {
   initDisplay();
 
   pinMode(BTN_LONG_PIN, INPUT_PULLUP);
-  pinMode(BTN_SHORT_PIN, INPUT_PULLUP);
+  pinMode(BTN_SHORT_PIN, INPUT);
 
   disableCore0WDT();
 
   xTaskCreatePinnedToCore(
-    networkTask, "network", 8192, NULL, 1, NULL, 0
+    networkTask, "network", 65536, NULL, 1, NULL, 0
   );
 
   vTaskDelay(100 / portTICK_PERIOD_MS);

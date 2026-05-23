@@ -2,9 +2,21 @@
 #include "config.h"
 #include <SPI.h>
 #include <WiFi.h>
+#include <driver/ledc.h>
+#include <Preferences.h>
+
+#define LEDC_TIMER      LEDC_TIMER_0
+#define LEDC_MODE       LEDC_LOW_SPEED_MODE
+#define LEDC_CHANNEL    LEDC_CHANNEL_0
+#define LEDC_DUTY_RES   LEDC_TIMER_8_BIT
+#define LEDC_FREQ       5000
+
+#define NVS_NAMESPACE "display"
+#define NVS_KEY_BRIGHT "brightness"
 
 SPIClass *vspi = nullptr;
 Adafruit_ST7789 *tft = nullptr;
+uint8_t g_brightness = 255;
 
 void initDisplay() {
   vspi = new SPIClass(VSPI);
@@ -14,6 +26,39 @@ void initDisplay() {
   tft->setRotation(0);
   tft->fillScreen(COLOR_BG);
   tft->setTextWrap(false);
+  initBacklight();
+}
+
+void initBacklight() {
+  ledcSetup(LEDC_CHANNEL, LEDC_FREQ, LEDC_DUTY_RES);
+  ledcAttachPin(TFT_BL, LEDC_CHANNEL);
+  Preferences prefs;
+  prefs.begin(NVS_NAMESPACE, true);
+  uint8_t saved = prefs.getUChar(NVS_KEY_BRIGHT, 255);
+  prefs.end();
+  ledcWrite(LEDC_CHANNEL, saved);
+  g_brightness = saved;
+}
+
+void setBrightness(uint8_t level) {
+  ledcWrite(LEDC_CHANNEL, level);
+  g_brightness = level;
+  Preferences prefs;
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putUChar(NVS_KEY_BRIGHT, level);
+  prefs.end();
+}
+
+void setBrightnessFast(uint8_t level) {
+  ledcWrite(LEDC_CHANNEL, level);
+  g_brightness = level;
+}
+
+void saveBrightness() {
+  Preferences prefs;
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putUChar(NVS_KEY_BRIGHT, g_brightness);
+  prefs.end();
 }
 
 void drawSectionLine(int y) {

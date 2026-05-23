@@ -41,6 +41,8 @@ struct AppState {
   bool provisioningMode;
   bool showingWarning;
   bool showingMinutely;
+  bool showingHelp;
+  bool dimmingActive;
   bool hasActiveWarnings;
   int warningIndex;
   unsigned long lastWeatherFetch;
@@ -59,6 +61,11 @@ struct AppState {
   bool savedShowingMinutely;
   bool savedShowingSystemInfo;
   int forceWarnShownCount;
+
+  // Remote control from web
+  int8_t remotePage;          // -1 = none, 0-4 = page to navigate to
+  int8_t pendingRotation;     // -1 = none, 0-3 = screen rotation
+  uint32_t weatherIntervalMs; // weather fetch interval (ms)
 };
 
 struct WarningData {

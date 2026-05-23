@@ -9,6 +9,8 @@ enum PageId : uint8_t {
     PAGE_WARNING,
     PAGE_MINUTELY,
     PAGE_SYSTEM_INFO,
+    PAGE_BRIGHTNESS,
+    PAGE_HELP,
 };
 
 // ===== Querying =====
@@ -17,8 +19,12 @@ PageId getCurrentPage();
 // ===== Page transitions =====
 void setCurrentPage(PageId page);
 
-// Short-press cycle: main → warning → minutely → system → main
+// Short-press cycle: main -> warning -> minutely -> system -> main
 void pageNext();
+
+// ===== Brightness page =====
+void enterBrightnessPage();
+void exitBrightnessPage();
 
 // ===== Force warning popup =====
 // Saves current page, enters warning, returns true if popup started

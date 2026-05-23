@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 // ===== Main page =====
 namespace main_page {
     void drawStatusHeader();
@@ -28,4 +30,15 @@ namespace system_page {
 namespace warning_page {
     void drawWarningPage();
     void updateWarningScroll();
+}
+
+// ===== Brightness page =====
+namespace brightness_page {
+    void drawBrightnessPage();
+    void updateBrightnessBar(uint8_t brightness, int8_t dir);
+}
+
+// ===== Help page =====
+namespace help_page {
+    void drawHelpPage();
 }
