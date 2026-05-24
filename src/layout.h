@@ -29,11 +29,21 @@
 
 // ===== Clock section =====
 #define CLOCK_Y      56
-#define CLOCK_H      58
+#define CLOCK_H      62        // was 58, expanded for card
 #define CLOCK_TEXT_Y 60
 #define SEC_X_OFFSET 6
 #define SEC_Y        79
 #define DATE_Y       100
+
+// ===== Clock card (macaron redesign) =====
+#define CLOCK_CARD_X    4
+#define CLOCK_CARD_Y    56
+#define CLOCK_CARD_W    232
+#define CLOCK_CARD_H    62
+#define CLOCK_CARD_R    8
+#define CLOCK_HM_Y      60        // HH:MM baseline (size 5, 40px tall)
+#define CLOCK_SS_Y      72        // SS baseline (size 2, centered on HH:MM)
+#define CLOCK_DATE_Y    100       // Date baseline (drawGB16, 16px tall)
 
 // ===== Detail section =====
 #define LINE3_Y      120
@@ -64,6 +74,13 @@
 
 // ===== Hourly chart data =====
 #define HOUR_COUNT   7
+
+// ===== Macaron clock card colors =====
+#define COL_CLOCK_CARD   0xFEDA  // 暖奶油蜜桃     卡片背景
+#define COL_CLOCK_HM     0xC9CC  // 蔷薇粉         HH:MM 主色（更饱和鲜明）
+#define COL_CLOCK_SS     0xCB8C  // 珊瑚粉         秒数
+#define COL_CLOCK_DATE   0x9288  // 暖可可棕       日期
+#define COL_CLOCK_COLON  0xC9CC  // 同 HM          冒号
 
 // ===== Colors =====
 #define COLOR_BG       0x08A5

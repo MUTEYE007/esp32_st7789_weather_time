@@ -113,11 +113,14 @@ void drawWeatherSection() {
     }
 }
 
+static const char *wdCN[] = {"日","一","二","三","四","五","六"};
+
 void drawClockSection() {
-    fillArea(PAD_LEFT, CLOCK_Y, CONTENT_W, CLOCK_H, COLOR_BG);
+    // Always draw card background first
+    tft->fillRoundRect(CLOCK_CARD_X, CLOCK_CARD_Y, CLOCK_CARD_W, CLOCK_CARD_H,
+                       CLOCK_CARD_R, COL_CLOCK_CARD);
 
     int h, m, s;
-    char dateBuf[24] = "";
 
     if (state.timeSynced) {
         time_t t = timeClient->getEpochTime();
@@ -125,67 +128,121 @@ void drawClockSection() {
         h = ti->tm_hour;
         m = ti->tm_min;
         s = ti->tm_sec;
-        static const char *days[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
-        sprintf(dateBuf, "%04d-%02d-%02d %s",
-            ti->tm_year + 1900, ti->tm_mon + 1, ti->tm_mday,
-            days[ti->tm_wday]);
     } else if (state.ntpTried) {
         unsigned long ms = millis() - state.bootTime;
         s = (ms / 1000) % 60;
         m = (ms / 60000) % 60;
         h = (ms / 3600000) % 24;
-        strcpy(dateBuf, state.ntpFailReason);
     } else {
-        tft->setTextColor(COLOR_ACCENT);
+        tft->setTextColor(COLOR_ACCENT, COL_CLOCK_CARD);
         tft->setTextSize(2);
-        tft->setCursor(50, CLOCK_Y + 20);
+        tft->setCursor(56, CLOCK_CARD_Y + 22);
         tft->print("Syncing...");
         return;
     }
 
-    char buf[6];
-    sprintf(buf, "%02d:%02d", h, m);
+    // Centering: HH(60) + ':'(30) + MM(60) + gap(6) + SS(24) = 180px
+    int totalW = 5 * 30 + 6 + 2 * 12;
+    int cx = (SCREEN_W - totalW) / 2;
 
-    int strW = strlen(buf) * 30;
-    int cx = (SCREEN_W - strW) / 2;
+    char hBuf[3], mBuf[3], sBuf[3];
+    sprintf(hBuf, "%02d", h);
+    sprintf(mBuf, "%02d", m);
+    sprintf(sBuf, "%02d", s);
 
+    // HH
     tft->setTextSize(5);
-    tft->setTextColor(COLOR_CLOCK);
-    tft->setCursor(cx, CLOCK_TEXT_Y);
-    tft->print(buf);
+    tft->setTextColor(COL_CLOCK_HM, COL_CLOCK_CARD);
+    tft->setCursor(cx, CLOCK_HM_Y);
+    tft->print(hBuf);
 
-    char secBuf[3];
-    sprintf(secBuf, "%02d", s);
-    tft->setTextSize(2);
-    tft->setTextColor(COLOR_LABEL);
-    tft->setCursor(cx + strW + SEC_X_OFFSET, SEC_Y);
-    tft->print(secBuf);
+    // Colon (always visible here; flashing handled by updateClockTime)
+    tft->setTextColor(COL_CLOCK_COLON, COL_CLOCK_CARD);
+    tft->setCursor(cx + 2 * 30, CLOCK_HM_Y);
+    tft->print(":");
 
-    int dateW = strlen(dateBuf) * 12;
-    int dcx = (SCREEN_W - dateW) / 2;
+    // MM
+    tft->setTextColor(COL_CLOCK_HM, COL_CLOCK_CARD);
+    tft->setCursor(cx + 3 * 30, CLOCK_HM_Y);
+    tft->print(mBuf);
+
+    // SS
     tft->setTextSize(2);
-    tft->setTextColor(COLOR_LABEL);
-    tft->setCursor(dcx, DATE_Y);
-    tft->print(dateBuf);
+    tft->setTextColor(COL_CLOCK_SS, COL_CLOCK_CARD);
+    tft->setCursor(cx + 5 * 30 + 6, CLOCK_SS_Y);
+    tft->print(sBuf);
+
+    // Date
+    if (state.timeSynced) {
+        time_t t = timeClient->getEpochTime();
+        struct tm *ti = localtime(&t);
+        char dateBuf[32];
+        sprintf(dateBuf, "%04d年%02d月%02d日 星期%s",
+            ti->tm_year + 1900, ti->tm_mon + 1, ti->tm_mday,
+            wdCN[ti->tm_wday]);
+        int dateW = textWidth16(dateBuf);
+        int dcx = (SCREEN_W - dateW) / 2;
+        drawGB16(dcx, CLOCK_DATE_Y, dateBuf, COL_CLOCK_DATE, COL_CLOCK_CARD);
+    } else {
+        int dw = strlen(state.ntpFailReason) * 12;
+        tft->setTextSize(2);
+        tft->setTextColor(COLOR_MUTED, COL_CLOCK_CARD);
+        tft->setCursor((SCREEN_W - dw) / 2, CLOCK_DATE_Y);
+        tft->print(state.ntpFailReason);
+    }
 }
 
 void updateClockTime(int h, int m, int s) {
-    char buf[6];
-    sprintf(buf, "%02d:%02d", h, m);
-    int strW = strlen(buf) * 30;
-    int cx = (SCREEN_W - strW) / 2;
+    static bool colonVisible = true;
+    colonVisible = !colonVisible;
 
+    int totalW = 5 * 30 + 6 + 2 * 12;
+    int cx = (SCREEN_W - totalW) / 2;
+
+    char hBuf[3], mBuf[3], sBuf[3];
+    sprintf(hBuf, "%02d", h);
+    sprintf(mBuf, "%02d", m);
+    sprintf(sBuf, "%02d", s);
+
+    // HH
     tft->setTextSize(5);
-    tft->setTextColor(COLOR_CLOCK, COLOR_BG);
-    tft->setCursor(cx, CLOCK_TEXT_Y);
-    tft->print(buf);
+    tft->setTextColor(COL_CLOCK_HM, COL_CLOCK_CARD);
+    tft->setCursor(cx, CLOCK_HM_Y);
+    tft->print(hBuf);
 
-    char secBuf[3];
-    sprintf(secBuf, "%02d", s);
+    // Colon — flash every second
+    int colonX = cx + 2 * 30;
+    if (colonVisible) {
+        tft->setTextColor(COL_CLOCK_COLON, COL_CLOCK_CARD);
+        tft->setCursor(colonX, CLOCK_HM_Y);
+        tft->print(":");
+    } else {
+        fillArea(colonX, CLOCK_HM_Y, 30, 40, COL_CLOCK_CARD);
+    }
+
+    // MM
+    tft->setTextColor(COL_CLOCK_HM, COL_CLOCK_CARD);
+    tft->setCursor(cx + 3 * 30, CLOCK_HM_Y);
+    tft->print(mBuf);
+
+    // SS
     tft->setTextSize(2);
-    tft->setTextColor(COLOR_LABEL, COLOR_BG);
-    tft->setCursor(cx + strW + SEC_X_OFFSET, SEC_Y);
-    tft->print(secBuf);
+    tft->setTextColor(COL_CLOCK_SS, COL_CLOCK_CARD);
+    tft->setCursor(cx + 5 * 30 + 6, CLOCK_SS_Y);
+    tft->print(sBuf);
+
+    // Date
+    if (state.timeSynced) {
+        time_t t = timeClient->getEpochTime();
+        struct tm *ti = localtime(&t);
+        char dateBuf[32];
+        sprintf(dateBuf, "%04d年%02d月%02d日 星期%s",
+            ti->tm_year + 1900, ti->tm_mon + 1, ti->tm_mday,
+            wdCN[ti->tm_wday]);
+        int dateW = textWidth16(dateBuf);
+        int dcx = (SCREEN_W - dateW) / 2;
+        drawGB16(dcx, CLOCK_DATE_Y, dateBuf, COL_CLOCK_DATE, COL_CLOCK_CARD);
+    }
 }
 
 void drawDetailSection() {
