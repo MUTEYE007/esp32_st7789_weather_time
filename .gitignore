@@ -11,6 +11,9 @@ src/config.h
 .lib
 Scripts/
 
+# Git worktrees
+.worktrees/
+
 # Build artifact
 compile_commands.json
 
