@@ -524,8 +524,21 @@ void uiTask(void *pvParameters) {
       if (flashW > 0 && (now - lastWarnFlash >= 500)) {
         lastWarnFlash = now;
         warnFlashOn = !warnFlashOn;
-        fillArea(flashX, STATUS_Y, flashW, STATUS_H,
-                 warnFlashOn ? warnColor : COLOR_BG);
+        uint16_t bg = warnFlashOn ? warnColor : COLOR_BG;
+        fillArea(flashX, STATUS_Y, flashW, STATUS_H, bg);
+
+        // Show first 2 Chinese chars of current warning name in the block
+        int wi = state.warningIndex;
+        if (wi >= 0 && wi < warningCount) {
+          String name = warnings[wi].eventName;
+          String twoChars = name.substring(0, min(6, (int)name.length()));
+          if (twoChars.length() > 0) {
+            int tw = textWidth16(twoChars.c_str());
+            int tx = flashX + (flashW - tw) / 2;
+            drawGB16(tx, STATUS_Y, twoChars.c_str(),
+                     warnFlashOn ? COLOR_WHITE : COLOR_BG, bg);
+          }
+        }
       }
     } else if (warnFlashOn) {
       warnFlashOn = false;
