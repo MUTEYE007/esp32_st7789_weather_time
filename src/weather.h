@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <time.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <WiFiManager.h>
@@ -120,3 +121,7 @@ void fetchHourly();
 void fetchDaily();
 void fetchWeatherWarnings();
 void fetchMinutelyPrecipitation();
+
+// Format the next update time as "HH:MM" given last fetch ms and interval ms.
+// Returns "--:--" if time not synced or fetch hasn't happened yet.
+String nextTimeStr(unsigned long lastMs, unsigned long intervalMs);

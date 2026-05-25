@@ -108,7 +108,6 @@ void networkTask(void *pvParameters) {
       bool ok = fetchWeather();
       fetchDaily();
       fetchHourly();
-      fetchWeatherWarnings();
       networkBusy = false;
       if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
         if (ok) {
@@ -117,6 +116,14 @@ void networkTask(void *pvParameters) {
         }
         xSemaphoreGive(dataMutex);
       }
+    }
+
+    // Independent timer for weather warnings (decoupled from weather data fetch)
+    if (state.wifiConnected &&
+        (now - state.lastWarningFetch > WARN_INTERVAL_MS || state.lastWarningFetch == 0)) {
+      networkBusy = true;
+      fetchWeatherWarnings();
+      networkBusy = false;
     }
 
     vTaskDelay(500 / portTICK_PERIOD_MS);
@@ -501,6 +508,22 @@ void uiTask(void *pvParameters) {
       main_page::updateClockTime(curHour, curMin, curSec);
     }
 
+    // Flash onboard LED when warnings are active (500ms interval)
+    static unsigned long lastLedToggle = 0;
+    static bool ledOn = false;
+    if (state.hasActiveWarnings) {
+      if (now - lastLedToggle >= 500) {
+        lastLedToggle = now;
+        ledOn = !ledOn;
+        digitalWrite(WARN_LED_GPIO, ledOn ? HIGH : LOW);
+      }
+    } else {
+      if (ledOn) {
+        ledOn = false;
+        digitalWrite(WARN_LED_GPIO, LOW);
+      }
+    }
+
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 }
@@ -523,6 +546,9 @@ void setup() {
 
   pinMode(BTN_LONG_PIN, INPUT_PULLUP);
   pinMode(BTN_SHORT_PIN, INPUT);
+
+  pinMode(WARN_LED_GPIO, OUTPUT);
+  digitalWrite(WARN_LED_GPIO, LOW);
 
   disableCore0WDT();
 

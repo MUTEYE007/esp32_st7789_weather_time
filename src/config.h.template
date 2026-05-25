@@ -20,4 +20,6 @@
 #define WARN_INTERVAL_MS  (10 * 60 * 1000)
 #define MINUTELY_INTERVAL_MS (10 * 60 * 1000)
 
+#define WARN_LED_GPIO 2
+
 #include "layout.h"

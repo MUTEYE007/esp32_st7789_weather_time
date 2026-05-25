@@ -46,31 +46,56 @@ void drawWeatherIcon(int cx, int cy, int code) {
 void drawStatusHeader() {
     fillArea(0, STATUS_Y, SCREEN_W, STATUS_H, COLOR_BG);
 
-    int nameEndX = PAD_LEFT;
     drawGB16(PAD_LEFT, STATUS_Y, weatherName.c_str(), COLOR_GOLD, COLOR_BG);
-    nameEndX += textWidth16(weatherName.c_str());
-
     drawWiFiBars(SCREEN_W - PAD_RIGHT - 20, STATUS_Y + 2, state.wifiConnected);
+
+    int nameEndX = PAD_LEFT + textWidth16(weatherName.c_str());
+
+    tft->setTextSize(1);
+    tft->setTextColor(COLOR_MUTED, COLOR_BG);
+    tft->setCursor(nameEndX, STATUS_Y + 3);
 
     if (state.timeSynced) {
         time_t t = timeClient->getEpochTime();
         struct tm *ti = localtime(&t);
-        tft->setTextSize(1);
-        tft->setTextColor(COLOR_MUTED);
-        tft->setCursor(nameEndX, STATUS_Y + 3);
         tft->printf(" %02d:%02d", ti->tm_hour, ti->tm_min);
+    } else {
+        tft->print(" --:--");
     }
+
+    // Next weather update (W) and next alert check (A) — English abbreviations
+    String wNext = nextTimeStr(state.lastWeatherFetch, state.weatherIntervalMs);
+    String aNext = nextTimeStr(state.lastWarningFetch, WARN_INTERVAL_MS);
+    tft->print(" W");
+    tft->print(wNext);
+    tft->print(" A");
+    tft->print(aNext);
 }
 
 void updateStatusTime() {
     if (!state.timeSynced) return;
-    time_t t = timeClient->getEpochTime();
-    struct tm *ti = localtime(&t);
+
     int nameEndX = PAD_LEFT + textWidth16(weatherName.c_str());
+    int wifiStartX = SCREEN_W - PAD_RIGHT - 20;
+
+    // Clear the space between city name and WiFi bars
+    fillArea(nameEndX, STATUS_Y, wifiStartX - nameEndX, STATUS_H, COLOR_BG);
+
     tft->setTextSize(1);
     tft->setTextColor(COLOR_MUTED, COLOR_BG);
     tft->setCursor(nameEndX, STATUS_Y + 3);
+
+    time_t t = timeClient->getEpochTime();
+    struct tm *ti = localtime(&t);
     tft->printf(" %02d:%02d", ti->tm_hour, ti->tm_min);
+
+    // Next weather update (W) and next alert check (A)
+    String wNext = nextTimeStr(state.lastWeatherFetch, state.weatherIntervalMs);
+    String aNext = nextTimeStr(state.lastWarningFetch, WARN_INTERVAL_MS);
+    tft->print(" W");
+    tft->print(wNext);
+    tft->print(" A");
+    tft->print(aNext);
 }
 
 void drawWeatherSection() {

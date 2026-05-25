@@ -552,3 +552,17 @@ void fetchWeatherWarnings() {
     xSemaphoreGive(dataMutex);
   }
 }
+
+String nextTimeStr(unsigned long lastMs, unsigned long intervalMs) {
+  if (!state.timeSynced || lastMs == 0) return "--:--";
+  unsigned long now = millis();
+  unsigned long nextMs = lastMs + intervalMs;
+  if (nextMs <= now) return "--:--";
+  unsigned long remainingSec = (nextMs - now) / 1000;
+  if (remainingSec > 24 * 3600) return "--:--"; // sanity
+  time_t t = timeClient->getEpochTime() + remainingSec;
+  struct tm *ti = localtime(&t);
+  char buf[6];
+  sprintf(buf, "%02d:%02d", ti->tm_hour, ti->tm_min);
+  return String(buf);
+}
