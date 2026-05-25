@@ -571,14 +571,17 @@ uint16_t getWarningSeverityColor() {
   if (warningCount == 0 || !state.hasActiveWarnings) return COLOR_BG;
 
   int highest = -1;
-  for (int i = 0; i < warningCount && i < WARNING_MAX; i++) {
-    if (!warnings[i].valid) continue;
-    const String &s = warnings[i].severity;
-    int level = 3;
-    if (s == "extreme")   level = 0;
-    else if (s == "severe")   level = 1;
-    else if (s == "moderate") level = 2;
-    if (level < highest || highest < 0) highest = level;
+  if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+    for (int i = 0; i < warningCount && i < WARNING_MAX; i++) {
+      if (!warnings[i].valid) continue;
+      const String &s = warnings[i].severity;
+      int level = 3;
+      if (s == "extreme")   level = 0;
+      else if (s == "severe")   level = 1;
+      else if (s == "moderate") level = 2;
+      if (level < highest || highest < 0) highest = level;
+    }
+    xSemaphoreGive(dataMutex);
   }
   switch (highest) {
     case 0:  return WARN_COLOR_RED;
