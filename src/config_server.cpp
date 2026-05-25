@@ -483,7 +483,7 @@ h1{font-size:var(--fs-lg);color:var(--gold);text-align:center;letter-spacing:2px
 <form id="upForm" method="post" enctype="multipart/form-data" action="/update" onsubmit="return onSubmit()">
 <div class="uparea" id="dropArea">
 <label class="flabel" id="fileLabel" for="fileInput">+ 选择固件文件</label>
-<input type="file" id="fileInput" accept=".bin" onchange="onFilePick()" />
+<input type="file" id="fileInput" name="firmware" accept=".bin" onchange="onFilePick()" />
 <div class="fname" id="fileName">未选择文件</div>
 </div>
 <button class="btn" id="upBtn" type="submit" disabled>上传固件</button>
@@ -558,7 +558,7 @@ void startConfigServer() {
     server.on("/control", HTTP_POST, handleControl);
     server.on("/status", handleStatus);
     server.on("/wifi", handleStatus);
-    server.on("/update", handleOtaGet);
+    server.on("/update", HTTP_GET, handleOtaGet);
     server.on("/update", HTTP_POST, handleOtaPost, handleOtaUpload);
     server.begin();
     serverStarted = true;
