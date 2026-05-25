@@ -28,4 +28,5 @@ __pycache__/
 tools/*.ttc
 tools/*.ttf
 tools/*.otf
-tools/*.otcversion.h
+tools/*.otc
+version.h
