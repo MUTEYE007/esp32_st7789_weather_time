@@ -60,6 +60,10 @@ void drawSystemInfo() {
         tft->print("s");
         y += SYS_LINE_H + 4;
 
+        // Firmware version (compile timestamp)
+        drawSysRow(y, "Build: ", __DATE__ " " __TIME__, COLOR_PRIMARY);
+        y += SYS_LINE_H;
+
         drawSysSectionLine(y);
         drawSysSection(y, "[ WiFi ]");
 
