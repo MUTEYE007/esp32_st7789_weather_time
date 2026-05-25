@@ -3,12 +3,18 @@
 #include "display.h"
 #include "page_manager.h"
 
-volatile int otaProgress = -1; // OTA progress for screen display
+volatile int otaProgress = -1; // OTA upload progress
+volatile int otaPhase = -1;    // Remote OTA state machine
+volatile int otaPercent = 0;   // Remote OTA download %
+char otaServerUrl[256] = "";   // Remote OTA server
+char otaVersionRemote[32] = "";// Remote version for display
 #include <WebServer.h>
 #include <WiFi.h>
 #include <Update.h>
 #include <time.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
+#include <HTTPClient.h>
 
 static WebServer server(80);
 static bool serverStarted = false;
@@ -493,12 +499,27 @@ h1{font-size:var(--fs-lg);color:var(--gold);text-align:center;letter-spacing:2px
 <button class="btn" id="upBtn" onclick="startUpload()" disabled>上传固件</button>
 <div class="prow" id="proW"><div class="pro" id="proB"></div><div class="pt" id="proT">0%</div></div>
 <div id="st" class="st"></div>
+<div class="sec"><div class="t">远程升级</div>
+<div><label style="color:var(--mute);font-size:var(--fs-s)">更新服务器</label>
+<input type="text" id="otaServer" style="width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);color:var(--amber);padding:6px 8px;font-size:var(--fs-s);font-family:'Courier New',monospace;margin:3px 0" placeholder="http://192.168.20.2:8080" /></div>
+<div style="display:flex;gap:6px;margin-top:4px">
+<button class="btn" onclick="saveOtaServer()" style="flex:2">保存服务器</button>
+<button class="btn r" onclick="checkUpdate()" id="chkBtn" style="flex:3">检查更新</button>
+</div>
+<div id="srvSt" class="st"></div>
+<div id="chkSt" class="st"></div>
+</div>
 <div class="back"><a href="/">← 返回主页</a></div>
 </div>
 <script>
 var picked=false;
 function onFilePick(){var f=document.getElementById('fileInput');if(f.files.length>0){document.getElementById('fileName').textContent=f.files[0].name;document.getElementById('upBtn').disabled=false;picked=true}}
 function startUpload(){if(!picked)return;var f=document.getElementById('fileInput');if(!f||!f.files||!f.files[0])return;var file=f.files[0];var btn=document.getElementById('upBtn');btn.disabled=true;btn.textContent='上传中...';document.getElementById('dropArea').style.display='none';document.getElementById('upBtn').style.display='none';document.getElementById('proW').style.display='block';var xhr=new XMLHttpRequest();xhr.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);document.getElementById('proB').style.width=p+'%';document.getElementById('proT').textContent=p+'%'}};xhr.onload=function(){document.body.innerHTML=xhr.responseText};xhr.onerror=function(){document.getElementById('st').className='st er';document.getElementById('st').textContent='上传失败'};var fd=new FormData();fd.append('firmware',file);xhr.open('POST','/update?size='+file.size,true);xhr.send(fd)}
+function sc(el,ok,t){el.className='st '+(ok?'ok':'er');el.style.display='block';el.textContent=t;setTimeout(()=>el.style.display='none',ok?3000:8000)}
+function saveOtaServer(){var u=document.getElementById('otaServer').value;if(!u){sc(document.getElementById('srvSt'),0,'请输入地址');return}fetch('/set-ota-server',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'url='+encodeURIComponent(u)}).then(r=>sc(document.getElementById('srvSt'),r.ok,r.ok?'已保存':'失败')).catch(e=>sc(document.getElementById('srvSt'),0,'网络错误'))}
+function checkUpdate(){var st=document.getElementById('chkSt');var btn=document.getElementById('chkBtn');btn.disabled=true;btn.textContent='检查中...';sc(st,1,'正在检查...');fetch('/check-update').then(r=>r.text()).then(t=>{sc(st,!t.includes('失败')&&!t.includes('错误'),t);btn.disabled=false;btn.textContent='检查更新'}).catch(e=>{sc(st,0,'连接超时');btn.disabled=false;btn.textContent='检查更新'})}
+function loadOtaServer(){fetch('/get-ota-server').then(r=>r.text()).then(u=>document.getElementById('otaServer').value=u).catch(()=>{})}
+loadOtaServer();
 </script></body></html>
 )rawliteral";
 
@@ -561,9 +582,167 @@ static void handleOtaPost() {
     }
 }
 
+// ---- Remote OTA ----
+#include "version.h"
+
+static void loadOtaServerUrl() {
+    Preferences p;
+    p.begin("ota", true);
+    String url = p.getString("server", "");
+    p.end();
+    strncpy(otaServerUrl, url.c_str(), sizeof(otaServerUrl) - 1);
+    otaServerUrl[sizeof(otaServerUrl) - 1] = '\0';
+}
+
+static void saveOtaServerUrl(const String &url) {
+    Preferences p;
+    p.begin("ota", false);
+    p.putString("server", url);
+    p.end();
+    strncpy(otaServerUrl, url.c_str(), sizeof(otaServerUrl) - 1);
+    otaServerUrl[sizeof(otaServerUrl) - 1] = '\0';
+}
+
+// Download firmware from URL and apply via Update library.
+// Blocks until done (~30-60s for 1.37MB over WiFi).
+static void downloadFirmware(const String &url) {
+    otaPhase = 1;
+    otaPercent = 0;
+
+    HTTPClient http;
+    http.begin(url);
+    http.setTimeout(30000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    int code = http.GET();
+    if (code != 200) {
+        Serial.printf("[ROTA] Download failed: HTTP %d\n", code);
+        otaPhase = 3;
+        http.end();
+        return;
+    }
+
+    int totalSize = http.getSize();
+    WiFiClient *stream = http.getStreamPtr();
+
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+        Update.printError(Serial);
+        otaPhase = 3;
+        http.end();
+        return;
+    }
+
+    uint8_t buf[1024];
+    int written = 0;
+    while (http.connected() && stream->connected()) {
+        size_t avail = stream->available();
+        if (avail == 0) { delay(1); continue; }
+        if (avail > sizeof(buf)) avail = sizeof(buf);
+        int len = stream->readBytes(buf, avail);
+        if (len > 0) {
+            if (Update.write(buf, len) != len) {
+                Update.printError(Serial);
+                otaPhase = 3;
+                http.end();
+                return;
+            }
+            written += len;
+            if (totalSize > 0) {
+                int pct = written * 100 / totalSize;
+                if (pct > 99) pct = 99;
+                otaPercent = pct;
+            }
+        }
+        yield();
+    }
+    http.end();
+
+    if (Update.end(true)) {
+        Serial.printf("[ROTA] Success: %d bytes\n", written);
+        otaPhase = 2;
+        delay(500);
+        ESP.restart();
+    } else {
+        Update.printError(Serial);
+        otaPhase = 3;
+    }
+}
+
+// Core check logic: returns status message.
+// If new version found, downloads and restarts.
+static String checkAndUpdate() {
+    if (strlen(otaServerUrl) == 0) return "未配置更新服务器";
+    otaPhase = 0;
+
+    String vu = String(otaServerUrl);
+    if (!vu.endsWith("/")) vu += "/";
+    vu += "version.json";
+
+    HTTPClient http;
+    http.begin(vu);
+    http.setTimeout(10000);
+    int code = http.GET();
+    if (code != 200) {
+        otaPhase = -1;
+        http.end();
+        return "服务器连接失败 (HTTP " + String(code) + ")";
+    }
+
+    String payload = http.getString();
+    http.end();
+
+    JsonDocument doc;
+    DeserializationError derr = deserializeJson(doc, payload);
+    if (derr) { otaPhase = -1; return "无法解析 version.json"; }
+
+    String remoteVer = doc["version"] | "";
+    String fwUrl = doc["url"] | "";
+    if (remoteVer.length() == 0 || fwUrl.length() == 0) {
+        otaPhase = -1;
+        return "version.json 格式错误";
+    }
+
+    strncpy(otaVersionRemote, remoteVer.c_str(), sizeof(otaVersionRemote) - 1);
+    otaVersionRemote[sizeof(otaVersionRemote) - 1] = '\0';
+
+    if (remoteVer == FW_VERSION) { otaPhase = -1; return "已是最新版本 (" + remoteVer + ")"; }
+
+    // Resolve URL
+    String absUrl = fwUrl;
+    if (fwUrl.startsWith("/")) {
+        String base = String(otaServerUrl);
+        int slash = base.lastIndexOf('/');
+        if (slash > 7) base = base.substring(0, slash + 1); else base += "/";
+        absUrl = base + fwUrl.substring(1);
+    }
+    downloadFirmware(absUrl);
+    return "发现新版本 " + remoteVer + "，开始下载...";
+}
+
+static void handleCheckUpdate() {
+    server.send(200, "text/plain; charset=utf-8", checkAndUpdate());
+}
+
+void periodicCheckUpdate() {
+    if (strlen(otaServerUrl) == 0) return;
+    if (otaPhase >= 0) return;
+    if (networkBusy) return;
+    String result = checkAndUpdate();
+    Serial.printf("[ROTA] Periodic: %s\n", result.c_str());
+}
+
+static void handleSetOtaServer() {
+    if (!server.hasArg("url")) {
+        server.send(400, "text/plain", "missing url");
+        return;
+    }
+    saveOtaServerUrl(server.arg("url"));
+    server.send(200, "text/plain; charset=utf-8", "已保存");
+}
+
 // ---- Lifecycle ----
 void startConfigServer() {
     if (serverStarted) return;
+    loadOtaServerUrl();
     server.on("/", handleRoot);
     server.on("/save", HTTP_POST, handleSave);
     server.on("/setcity", HTTP_POST, handleSetCity);
@@ -575,6 +754,11 @@ void startConfigServer() {
     server.on("/wifi", handleStatus);
     server.on("/update", HTTP_GET, handleOtaGet);
     server.on("/update", HTTP_POST, handleOtaPost, handleOtaUpload);
+    server.on("/check-update", HTTP_GET, handleCheckUpdate);
+    server.on("/set-ota-server", HTTP_POST, handleSetOtaServer);
+    server.on("/get-ota-server", HTTP_GET, [](){
+        server.send(200, "text/plain; charset=utf-8", otaServerUrl);
+    });
     server.begin();
     serverStarted = true;
     Serial.printf("[WEB] Server started on %s:80\n", WiFi.localIP().toString().c_str());

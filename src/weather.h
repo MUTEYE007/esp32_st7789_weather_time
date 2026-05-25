@@ -109,8 +109,24 @@ extern SemaphoreHandle_t dataMutex;
 extern volatile bool networkBusy;
 extern volatile bool weatherUpdated;
 
-// OTA update progress: -1 = idle, 0-100 = percent.
+// OTA upload progress (browser OTA): -1 = idle, 0-100 = percent
 extern volatile int otaProgress;
+
+// ---- Remote OTA ----
+// otaPhase: -1=idle, 0=checking, 1=downloading, 2=done/restart, 3=error
+extern volatile int otaPhase;
+// Download progress percent (0-100)
+extern volatile int otaPercent;
+// Remote server URL (saved in Preferences "ota:server")
+extern char otaServerUrl[256];
+// Remote version string for display
+extern char otaVersionRemote[32];
+// Download percent (0-100), used when otaPhase==1
+extern volatile int otaPercent;
+// Remote firmware version from server (for screen display)
+extern char otaRemoteVer[32];
+// Update server URL
+extern char otaServerUrl[256];
 
 void initWiFiWithProvisioning();
 void loadConfig();
