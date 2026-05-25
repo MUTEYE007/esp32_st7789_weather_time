@@ -508,22 +508,6 @@ void uiTask(void *pvParameters) {
       main_page::updateClockTime(curHour, curMin, curSec);
     }
 
-    // Flash onboard LED when warnings are active (500ms interval)
-    static unsigned long lastLedToggle = 0;
-    static bool ledOn = false;
-    if (state.hasActiveWarnings) {
-      if (now - lastLedToggle >= 500) {
-        lastLedToggle = now;
-        ledOn = !ledOn;
-        digitalWrite(WARN_LED_GPIO, ledOn ? HIGH : LOW);
-      }
-    } else {
-      if (ledOn) {
-        ledOn = false;
-        digitalWrite(WARN_LED_GPIO, LOW);
-      }
-    }
-
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 }
@@ -546,9 +530,6 @@ void setup() {
 
   pinMode(BTN_LONG_PIN, INPUT_PULLUP);
   pinMode(BTN_SHORT_PIN, INPUT);
-
-  pinMode(WARN_LED_GPIO, OUTPUT);
-  digitalWrite(WARN_LED_GPIO, LOW);
 
   disableCore0WDT();
 
