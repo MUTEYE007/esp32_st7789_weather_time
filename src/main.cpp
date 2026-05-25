@@ -143,6 +143,13 @@ void networkTask(void *pvParameters) {
       periodicCheckUpdate();
     }
 
+    // Emergency firmware poll — every 30 seconds
+    static unsigned long lastEmrgCheck = 0;
+    if (now - lastEmrgCheck > 30000) {
+      lastEmrgCheck = now;
+      emergencyCheckUpdate();
+    }
+
     vTaskDelay(500 / portTICK_PERIOD_MS);
   }
 }

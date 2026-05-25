@@ -773,6 +773,28 @@ void periodicCheckUpdate() {
     }
 }
 
+// Emergency firmware push — polls every ~30s.
+// If emergency.bin exists on server → force-download and flash.
+void emergencyCheckUpdate() {
+    if (strlen(otaServerUrl) == 0) return;
+    if (otaPhase >= 0) return;
+    if (networkBusy) return;
+
+    String url = String(otaServerUrl);
+    if (!url.endsWith("/")) url += "/";
+    url += "emergency.bin";
+
+    HTTPClient http;
+    http.begin(url);
+    http.setTimeout(5000);
+    int code = http.GET();
+    if (code != 200) { http.end(); return; }
+
+    Serial.println("[EMRG] emergency.bin found, force-updating...");
+    http.end();
+    downloadFirmware(url);
+}
+
 static void handleSetOtaServer() {
     if (!server.hasArg("url")) {
         server.send(400, "text/plain", "missing url");
