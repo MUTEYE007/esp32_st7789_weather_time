@@ -3,7 +3,7 @@
 
 namespace help_page {
 
-static const int LH = 18;
+static const int LH = 16;
 static int curY;
 
 static void section(const char *title) {
