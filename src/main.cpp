@@ -247,7 +247,7 @@ void uiTask(void *pvParameters) {
         btnPressStart = now;
         edgeGlowShown = false;
       } else {
-        float progress = (float)(now - btnPressStart) / 3000.0f;
+        float progress = (float)(now - btnPressStart) / 10000.0f;
         if (progress > 1.0f) progress = 1.0f;
         drawLongPressBar(progress);
       }
@@ -255,7 +255,7 @@ void uiTask(void *pvParameters) {
         drawEdgeGlow(true);
         edgeGlowShown = true;
       }
-      if ((now - btnPressStart) >= 3000) {
+      if ((now - btnPressStart) >= 10000) {
         fillArea(PAD_LEFT, 100, CONTENT_W, 20, COLOR_BG);
         tft->setTextColor(COLOR_ACCENT);
         tft->setTextSize(1);
