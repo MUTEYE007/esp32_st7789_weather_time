@@ -44,6 +44,7 @@ void networkTask(void *pvParameters) {
     if (state.provisioningMode) {
       wifiManager.process();
       if (WiFi.status() == WL_CONNECTED) {
+        wifiManager.stopConfigPortal();
         if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
           state.provisioningMode = false;
           state.wifiConnected = true;
@@ -51,6 +52,9 @@ void networkTask(void *pvParameters) {
           state.lastMinutelyFetch = 0;
           xSemaphoreGive(dataMutex);
         }
+        Serial.println("[BOOT] WiFi configured, restarting for clean state...");
+        delay(200);
+        ESP.restart();
       } else if (millis() - state.bootTime > 185000) {
         if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
           state.provisioningMode = false;
