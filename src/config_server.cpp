@@ -4,6 +4,7 @@
 #include "page_manager.h"
 #include <WebServer.h>
 #include <WiFi.h>
+#include <Update.h>
 #include <time.h>
 #include <ArduinoJson.h>
 
@@ -428,6 +429,122 @@ static void handleStatus() {
     server.send(200, "application/json", json);
 }
 
+// ---- OTA Firmware Update Page ----
+static const char OTA_PAGE[] = R"rawliteral(
+<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#1a1a1a;--card:#242424;--border:#3a3a3a;--amber:#e8c580;--gold:#f5d998;--teal:#00bfa5;--mute:#8a7a6a;--bg2:#202020;--red:#e85a4f;--fs:12px;--fs-s:10px;--fs-lg:14px;--p:16px;--r:6px}
+@media(min-width:768px){:root{--fs:14px;--fs-s:12px;--fs-lg:18px;--p:28px;--r:8px}}
+body{font-family:'Courier New',monospace;background:var(--bg);color:var(--amber);min-height:100vh;display:flex;justify-content:center;align-items:flex-start;margin:0;padding:var(--p)}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:var(--p);width:100%;max-width:640px;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+h1{font-size:var(--fs-lg);color:var(--gold);text-align:center;letter-spacing:2px;font-weight:400;margin-bottom:12px}
+.sec{margin-bottom:10px}
+.sec .t{font-size:var(--fs-s);text-transform:uppercase;letter-spacing:1.5px;color:var(--mute);padding:4px 0 3px;border-bottom:1px solid var(--border);margin-bottom:6px}
+.step{padding:4px 0;font-size:var(--fs-s);color:var(--amber);line-height:1.6}
+.step .n{color:var(--teal);margin-right:6px}
+.note{font-size:var(--fs-xs);color:var(--mute);padding:3px 0}
+.warn{font-size:var(--fs-xs);color:var(--red);padding:3px 0}
+.code{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:var(--fs-xs);color:var(--teal);font-family:'Courier New',monospace;margin:3px 0 6px;word-break:break-all}
+.uparea{border:2px dashed var(--border);border-radius:var(--r);padding:16px;text-align:center;margin:8px 0}
+.uparea input[type=file]{display:none}
+.uparea .flabel{display:inline-block;padding:7px 16px;border:1px solid var(--teal);border-radius:var(--r);background:linear-gradient(135deg,#00bfa522,#00bfa511);color:var(--teal);font-size:var(--fs-s);cursor:pointer;transition:all .2s;user-select:none;font-family:'Courier New',monospace}
+.uparea .flabel:hover{background:linear-gradient(135deg,#00bfa544,#00bfa522);box-shadow:0 0 12px #00bfa533}
+.uparea .fname{font-size:var(--fs-xs);color:var(--mute);margin-top:6px}
+.btn{width:100%;padding:9px;border:1px solid var(--teal);border-radius:var(--r);background:linear-gradient(135deg,#00bfa522,#00bfa511);color:var(--teal);font-size:var(--fs-s);font-family:'Courier New',monospace;text-transform:uppercase;letter-spacing:2px;cursor:pointer;transition:all .2s;user-select:none;margin-top:8px}
+.btn:hover{background:linear-gradient(135deg,#00bfa544,#00bfa522);box-shadow:0 0 12px #00bfa533}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.st{display:none;margin-top:8px;padding:8px;border-radius:var(--r);text-align:center;font-size:var(--fs-s);font-family:'Courier New',monospace}
+.st.ok{display:block;background:#00bfa511;color:var(--teal);border:1px solid #00bfa533}
+.st.er{display:block;background:var(--red)11;color:var(--red);border:1px solid var(--red)33}
+.back{margin-top:12px;text-align:center}
+.back a{color:var(--mute);font-size:var(--fs-xs);text-decoration:none;letter-spacing:1px}
+.back a:hover{color:var(--teal)}
+</style></head><body>
+<div class="panel">
+<h1>⚡ 固件升级</h1>
+<div class="sec"><div class="t">操作步骤</div>
+<div class="step"><span class="n">①</span>编译固件 — 在项目目录运行：</div>
+<div class="code">pio run -e featheresp32</div>
+<div class="step"><span class="n">②</span>选择生成的固件文件</div>
+<div class="code">.pio/build/featheresp32/firmware.bin</div>
+<div class="step"><span class="n">③</span>点击下方按钮上传</div>
+<div class="step"><span class="n">④</span>等待约 10~20 秒</div>
+<div class="step"><span class="n">⑤</span>设备自动重启，完成升级</div>
+</div>
+<div class="sec"><div class="t">注意事项</div>
+<div class="warn">⚠ 升级过程中请勿断开电源</div>
+<div class="note">✓ 采用 A/B 双槽设计，升级失败自动回退</div>
+<div class="note">✓ 当前版本可放心测试</div>
+</div>
+<form id="upForm" method="post" enctype="multipart/form-data" action="/update" onsubmit="return onSubmit()">
+<div class="uparea" id="dropArea">
+<label class="flabel" id="fileLabel" for="fileInput">+ 选择固件文件</label>
+<input type="file" id="fileInput" accept=".bin" onchange="onFilePick()" />
+<div class="fname" id="fileName">未选择文件</div>
+</div>
+<button class="btn" id="upBtn" type="submit" disabled>上传固件</button>
+</form>
+<div id="st" class="st"></div>
+<div class="back"><a href="/">← 返回主页</a></div>
+</div>
+<script>
+var picked=false;
+function onFilePick(){var f=document.getElementById('fileInput');if(f.files.length>0){document.getElementById('fileName').textContent=f.files[0].name;document.getElementById('upBtn').disabled=false;picked=true}}
+function onSubmit(){if(!picked)return false;var f=document.getElementById('fileInput').files[0];if(!f)return false;var btn=document.getElementById('upBtn');btn.disabled=true;btn.textContent='上传中...';document.getElementById('st').className='st ok';document.getElementById('st').textContent='正在写入固件，请勿断电...';var form=document.getElementById('upForm');form.style.display='none';return true}
+</script></body></html>
+)rawliteral";
+
+static void handleOtaGet() {
+    Serial.println("[WEB] GET /update");
+    server.send(200, "text/html; charset=utf-8", OTA_PAGE);
+}
+
+static void handleOtaUpload() {
+    HTTPUpload &upload = server.upload();
+    static unsigned long totalWritten = 0;
+
+    if (upload.status == UPLOAD_FILE_START) {
+        Serial.printf("[OTA] Start: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
+        totalWritten = 0;
+        if (!Update.begin(upload.totalSize)) {
+            Update.printError(Serial);
+        }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        size_t written = Update.write(upload.buf, upload.currentSize);
+        if (written != upload.currentSize) {
+            Update.printError(Serial);
+        }
+        totalWritten += written;
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (Update.end(true)) {
+            Serial.printf("[OTA] Success: %lu bytes written\n", totalWritten + upload.currentSize);
+        } else {
+            Update.printError(Serial);
+        }
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        Update.abort();
+        Serial.println("[OTA] Aborted");
+    }
+}
+
+static void handleOtaPost() {
+    if (Update.hasError()) {
+        String err = Update.errorString();
+        Serial.printf("[OTA] Error: %s\n", err.c_str());
+        String page = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/update\"><style>body{background:#1a1a1a;color:#e8c580;font-family:'Courier New',monospace;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:20px}.c{background:#242424;border:1px solid #3a3a3a;border-radius:12px;padding:28px;max-width:480px;text-align:center}h2{color:#e85a4f;margin-bottom:12px}p{color:#8a7a6a;font-size:12px}</style></head><body><div class=\"c\"><h2>❌ 升级失败</h2><p>" + err + "</p><p style=\"margin-top:12px\">5 秒后返回升级页面</p></div></body></html>";
+        server.send(200, "text/html; charset=utf-8", page);
+    } else {
+        Serial.println("[OTA] POST success, restarting...");
+        String page = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>body{background:#1a1a1a;color:#e8c580;font-family:'Courier New',monospace;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:20px}.c{background:#242424;border:1px solid #3a3a3a;border-radius:12px;padding:28px;max-width:480px;text-align:center}h2{color:#00bfa5;margin-bottom:12px}p{color:#8a7a6a;font-size:12px}.sp{display:inline-block;width:12px;height:12px;border:2px solid #00bfa5;border-top-color:transparent;border-radius:50%;animation:s .8s linear infinite;margin-top:12px}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div class=\"c\"><h2>✅ 升级成功</h2><p>设备正在重启...</p><div class=\"sp\"></div></div></body></html>";
+        server.send(200, "text/html; charset=utf-8", page);
+        delay(1000);
+        ESP.restart();
+    }
+}
+
 // ---- Lifecycle ----
 void startConfigServer() {
     if (serverStarted) return;
@@ -440,6 +557,8 @@ void startConfigServer() {
     server.on("/control", HTTP_POST, handleControl);
     server.on("/status", handleStatus);
     server.on("/wifi", handleStatus);
+    server.on("/update", handleOtaGet);
+    server.on("/update", HTTP_POST, handleOtaPost, handleOtaUpload);
     server.begin();
     serverStarted = true;
     Serial.printf("[WEB] Server started on %s:80\n", WiFi.localIP().toString().c_str());
