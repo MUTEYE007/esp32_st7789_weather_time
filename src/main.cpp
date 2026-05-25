@@ -562,7 +562,7 @@ void uiTask(void *pvParameters) {
         fillArea(0, SCREEN_H - 4, SCREEN_W, 4, COLOR_BG);
         fillArea(0, SCREEN_H - 4, bw, 4, COLOR_GREEN);
       } else if (otaProgress < 0 && lastOtaPct != -2) {
-        fillArea(0, SCREEN_H - 4, SCREEN_W, 4, 0x08A5);     // clear
+        fillArea(0, SCREEN_H - 4, SCREEN_W, 4, COLOR_BG);
       }
     }
 
