@@ -58,7 +58,7 @@ void drawSystemInfo() {
         tft->print("m ");
         tft->print(up % 60);
         tft->print("s");
-        y += SYS_LINE_H + 4;
+        y += SYS_LINE_H;
 
         // Firmware version (compile timestamp)
         drawSysRow(y, "Build: ", __DATE__ " " __TIME__, COLOR_PRIMARY);
@@ -88,7 +88,7 @@ void drawSystemInfo() {
         } else {
             tft->print("N/A");
         }
-        y += SYS_LINE_H + 4;
+        y += SYS_LINE_H;
 
         drawSysSectionLine(y);
         drawSysSection(y, "[ NTP ]");
@@ -113,7 +113,7 @@ void drawSystemInfo() {
         } else {
             tft->print("Not available");
         }
-        y += SYS_LINE_H + 4;
+        y += SYS_LINE_H;
 
         drawSysSectionLine(y);
         drawSysSection(y, "[ Weather API ]");
@@ -180,7 +180,7 @@ void drawSystemInfo() {
         } else {
             tft->print("Not available");
         }
-        y += SYS_LINE_H + 4;
+        y += SYS_LINE_H;
 
         drawSysSectionLine(y);
         drawSysSection(y, "[ Weather API ]");
