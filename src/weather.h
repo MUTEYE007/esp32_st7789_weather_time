@@ -125,3 +125,6 @@ void fetchMinutelyPrecipitation();
 // Format the next update time as "HH:MM" given last fetch ms and interval ms.
 // Returns "--:--" if time not synced or fetch hasn't happened yet.
 String nextTimeStr(unsigned long lastMs, unsigned long intervalMs);
+
+// Get the color of the most severe active warning.
+uint16_t getWarningSeverityColor();

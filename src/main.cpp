@@ -7,6 +7,7 @@
 #include "weather.h"
 #include "ui.h"
 #include "page_manager.h"
+#include "ui_common.h"
 #include "config_server.h"
 
 static unsigned long lastWifiTry = 0;
@@ -506,6 +507,33 @@ void uiTask(void *pvParameters) {
       lastUiSec = curSec;
       main_page::updateStatusTime();
       main_page::updateClockTime(curHour, curMin, curSec);
+    }
+
+    // Flash status bar gap (between W/A text and WiFi) when warnings active
+    static unsigned long lastWarnFlash = 0;
+    static bool warnFlashOn = false;
+    uint16_t warnColor = getWarningSeverityColor();
+    if (warnColor != COLOR_BG) {
+      int nameEndX = PAD_LEFT + textWidth16(weatherName.c_str());
+      // textSize=1: " 14:30 W15:00 A15:10" ≈ 20 chars × ~6px
+      int textEndX = nameEndX + 20 * 6;
+      int wifiStartX = SCREEN_W - PAD_RIGHT - 20;
+      int flashW = wifiStartX - textEndX;
+      if (flashW > 0 && (now - lastWarnFlash >= 500)) {
+        lastWarnFlash = now;
+        warnFlashOn = !warnFlashOn;
+        fillArea(textEndX, STATUS_Y, flashW, STATUS_H,
+                 warnFlashOn ? warnColor : COLOR_BG);
+      }
+    } else if (warnFlashOn) {
+      warnFlashOn = false;
+      int nameEndX = PAD_LEFT + textWidth16(weatherName.c_str());
+      int textEndX = nameEndX + 20 * 6;
+      int wifiStartX = SCREEN_W - PAD_RIGHT - 20;
+      int flashW = wifiStartX - textEndX;
+      if (flashW > 0) {
+        fillArea(textEndX, STATUS_Y, flashW, STATUS_H, COLOR_BG);
+      }
     }
 
     vTaskDelay(50 / portTICK_PERIOD_MS);

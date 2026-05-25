@@ -566,3 +566,25 @@ String nextTimeStr(unsigned long lastMs, unsigned long intervalMs) {
   sprintf(buf, "%02d:%02d", ti->tm_hour, ti->tm_min);
   return String(buf);
 }
+
+uint16_t getWarningSeverityColor() {
+  if (warningCount == 0 || !state.hasActiveWarnings) return COLOR_BG;
+
+  int highest = -1;
+  for (int i = 0; i < warningCount && i < WARNING_MAX; i++) {
+    if (!warnings[i].valid) continue;
+    const String &s = warnings[i].severity;
+    int level = 3;
+    if (s == "extreme")   level = 0;
+    else if (s == "severe")   level = 1;
+    else if (s == "moderate") level = 2;
+    if (level < highest || highest < 0) highest = level;
+  }
+  switch (highest) {
+    case 0:  return WARN_COLOR_RED;
+    case 1:  return WARN_COLOR_ORANGE;
+    case 2:  return WARN_COLOR_YELLOW;
+    case 3:  return WARN_COLOR_BLUE;
+    default: return COLOR_BG;
+  }
+}
