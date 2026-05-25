@@ -752,13 +752,10 @@ static void handleCheckUpdate() {
         server.send(200, "text/plain; charset=utf-8", "升级已在进行中");
         return;
     }
-    // Send response BEFORE blocking on download, so browser gets something
-    server.send(200, "text/plain; charset=utf-8", "正在检查...");
     String result = checkAndUpdate();
-    // If checkAndUpdate didn't restart (error or same version), update the response
-    // Note: server.send was already called, but the client will see the first msg.
-    // Longer-term: implement SSE or polling. For now this is a usability improvement.
-    Serial.printf("[ROTA] check result: %s\n", result.c_str());
+    // If download succeeded → ESP.restart() was called, we never reach here.
+    // Otherwise send the result (error or "已是最新版本") back to the browser.
+    server.send(200, "text/plain; charset=utf-8", result);
 }
 
 void periodicCheckUpdate() {
