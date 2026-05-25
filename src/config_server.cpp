@@ -531,7 +531,7 @@ static void handleOtaUpload() {
             if (otaProgress > 99) otaProgress = 99;
         }
     } else if (upload.status == UPLOAD_FILE_END) {
-        if (Update.end()) {
+        if (Update.end(true)) {   // true = evenIfRemaining (firmware < partition size)
             Serial.printf("[OTA] Success: %lu bytes\n", totalWritten);
             otaProgress = 100;
         } else {
