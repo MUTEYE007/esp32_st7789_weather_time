@@ -508,9 +508,10 @@ static void handleOtaUpload() {
     static unsigned long totalWritten = 0;
 
     if (upload.status == UPLOAD_FILE_START) {
-        Serial.printf("[OTA] Start: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
+        Serial.printf("[OTA] Start: %s\n", upload.filename.c_str());
         totalWritten = 0;
-        if (!Update.begin(upload.totalSize)) {
+        // Use UPDATE_SIZE_UNKNOWN — multipart totalSize is unreliable
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
             Update.printError(Serial);
         }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -520,8 +521,8 @@ static void handleOtaUpload() {
         }
         totalWritten += written;
     } else if (upload.status == UPLOAD_FILE_END) {
-        if (Update.end(true)) {
-            Serial.printf("[OTA] Success: %lu bytes written\n", totalWritten + upload.currentSize);
+        if (Update.end()) {
+            Serial.printf("[OTA] Success: %lu bytes\n", totalWritten);
         } else {
             Update.printError(Serial);
         }
