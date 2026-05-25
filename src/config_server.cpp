@@ -609,13 +609,15 @@ static void downloadFirmware(const String &url) {
     otaPhase = 1;
     otaPercent = 0;
 
+    Serial.printf("[ROTA] Download start: %s\n", url.c_str());
+
     HTTPClient http;
     http.begin(url);
     http.setTimeout(30000);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     int code = http.GET();
     if (code != 200) {
-        Serial.printf("[ROTA] Download failed: HTTP %d\n", code);
+        Serial.printf("[ROTA] FAIL HTTP %d\n", code);
         otaPhase = 3;
         http.end();
         return;
@@ -623,45 +625,68 @@ static void downloadFirmware(const String &url) {
 
     int totalSize = http.getSize();
     WiFiClient *stream = http.getStreamPtr();
+    Serial.printf("[ROTA] Content-Length: %d\n", totalSize);
 
     if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+        Serial.print("[ROTA] Update.begin FAIL: ");
         Update.printError(Serial);
         otaPhase = 3;
         http.end();
         return;
     }
+    Serial.println("[ROTA] Update.begin OK");
 
     uint8_t buf[1024];
     int written = 0;
-    while (http.connected() && stream->connected()) {
+    int idleMs = 0;
+    while (http.connected() || stream->available()) {
         size_t avail = stream->available();
-        if (avail == 0) { delay(1); continue; }
+        if (avail == 0) {
+            if (totalSize > 0 && written >= totalSize) {
+                Serial.printf("[ROTA] All %d bytes received, exit loop\n", written);
+                break;
+            }
+            idleMs++;
+            if (idleMs > 3000) { // 3s idle → connection dead
+                Serial.printf("[ROTA] Idle timeout at %d/%d bytes\n", written, totalSize);
+                break;
+            }
+            delay(1);
+            continue;
+        }
+        idleMs = 0;
         if (avail > sizeof(buf)) avail = sizeof(buf);
         int len = stream->readBytes(buf, avail);
         if (len > 0) {
-            if (Update.write(buf, len) != len) {
+            size_t w = Update.write(buf, len);
+            if (w != (size_t)len) {
+                Serial.printf("[ROTA] Update.write short %u/%d: ", w, len);
                 Update.printError(Serial);
                 otaPhase = 3;
                 http.end();
                 return;
             }
             written += len;
-            if (totalSize > 0) {
-                int pct = written * 100 / totalSize;
-                if (pct > 99) pct = 99;
-                otaPercent = pct;
-            }
+            if (totalSize > 0) otaPercent = written * 100 / totalSize;
         }
         yield();
     }
     http.end();
+    Serial.printf("[ROTA] Download complete: %d bytes\n", written);
+
+    if (totalSize > 0 && written < totalSize) {
+        Serial.printf("[ROTA] FAIL incomplete: %d/%d bytes\n", written, totalSize);
+        otaPhase = 3;
+        return;
+    }
 
     if (Update.end(true)) {
-        Serial.printf("[ROTA] Success: %d bytes\n", written);
+        Serial.printf("[ROTA] SUCCESS: %d bytes flashed, restarting...\n", written);
         otaPhase = 2;
         delay(500);
         ESP.restart();
     } else {
+        Serial.print("[ROTA] Update.end FAIL: ");
         Update.printError(Serial);
         otaPhase = 3;
     }
@@ -719,6 +744,10 @@ static String checkAndUpdate() {
 }
 
 static void handleCheckUpdate() {
+    if (otaPhase >= 0) {
+        server.send(200, "text/plain; charset=utf-8", "升级已在进行中");
+        return;
+    }
     server.send(200, "text/plain; charset=utf-8", checkAndUpdate());
 }
 
