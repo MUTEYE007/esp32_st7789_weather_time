@@ -692,10 +692,9 @@ static void downloadFirmware(const String &url) {
     }
 }
 
-// Core check logic: returns status message.
-// On success (new version found) → download + restart, call does not return.
-// On error → returns "ERR: ..." (JS checks for ERR: prefix).
-static String checkAndUpdate() {
+// Phase 1: check version.json only (fast, ~2s).
+// Returns status message AND sets absFirmwareUrl if new version found.
+static String checkVersion(String &absFirmwareUrl) {
     if (strlen(otaServerUrl) == 0) return "ERR:未配置更新服务器";
     otaPhase = 0;
 
@@ -707,11 +706,7 @@ static String checkAndUpdate() {
     http.begin(vu);
     http.setTimeout(10000);
     int code = http.GET();
-    if (code != 200) {
-        otaPhase = -1;
-        http.end();
-        return "ERR:服务器连接失败 (HTTP " + String(code) + ")";
-    }
+    if (code != 200) { otaPhase = -1; http.end(); return "ERR:服务器连接失败 (HTTP " + String(code) + ")"; }
 
     String payload = http.getString();
     http.end();
@@ -722,10 +717,7 @@ static String checkAndUpdate() {
 
     String remoteVer = doc["version"] | "";
     String fwUrl = doc["url"] | "";
-    if (remoteVer.length() == 0 || fwUrl.length() == 0) {
-        otaPhase = -1;
-        return "ERR:version.json 格式错误";
-    }
+    if (remoteVer.length() == 0 || fwUrl.length() == 0) { otaPhase = -1; return "ERR:version.json 格式错误"; }
 
     strncpy(otaVersionRemote, remoteVer.c_str(), sizeof(otaVersionRemote) - 1);
     otaVersionRemote[sizeof(otaVersionRemote) - 1] = '\0';
@@ -733,18 +725,14 @@ static String checkAndUpdate() {
     if (remoteVer == FW_VERSION) { otaPhase = -1; return "已是最新版本 (" + remoteVer + ")"; }
 
     // Resolve URL
-    String absUrl = fwUrl;
+    absFirmwareUrl = fwUrl;
     if (fwUrl.startsWith("/")) {
         String base = String(otaServerUrl);
         int slash = base.lastIndexOf('/');
         if (slash > 7) base = base.substring(0, slash + 1); else base += "/";
-        absUrl = base + fwUrl.substring(1);
+        absFirmwareUrl = base + fwUrl.substring(1);
     }
-    downloadFirmware(absUrl);
-    // downloadFirmware succeeded → ESP.restart() was called.
-    // If it failed (otaPhase==3), report error.
-    if (otaPhase == 3) return "ERR:下载失败，请检查服务器和网络";
-    return "发现新版本 " + remoteVer + "，开始下载...";
+    return "发现新版本 " + remoteVer + "，正在下载...";
 }
 
 static void handleCheckUpdate() {
@@ -752,18 +740,37 @@ static void handleCheckUpdate() {
         server.send(200, "text/plain; charset=utf-8", "升级已在进行中");
         return;
     }
-    String result = checkAndUpdate();
-    // If download succeeded → ESP.restart() was called, we never reach here.
-    // Otherwise send the result (error or "已是最新版本") back to the browser.
-    server.send(200, "text/plain; charset=utf-8", result);
+
+    String firmwareUrl;
+    String msg = checkVersion(firmwareUrl);
+
+    if (firmwareUrl.length() > 0) {
+        // New version found → send response to browser, THEN block on download
+        server.send(200, "text/plain; charset=utf-8", msg);
+        downloadFirmware(firmwareUrl);
+        // If download failed (otaPhase==3), we're back here but can't send another response
+        Serial.printf("[ROTA] Download failed after response sent, phase=%d\n", otaPhase);
+    } else {
+        // Same version or error → send result
+        server.send(200, "text/plain; charset=utf-8", msg);
+    }
 }
 
+// Periodic check from networkTask — no HTTP context, just log result
 void periodicCheckUpdate() {
     if (strlen(otaServerUrl) == 0) return;
     if (otaPhase >= 0) return;
     if (networkBusy) return;
-    String result = checkAndUpdate();
-    Serial.printf("[ROTA] Periodic: %s\n", result.c_str());
+
+    String firmwareUrl;
+    String msg = checkVersion(firmwareUrl);
+
+    if (firmwareUrl.length() > 0) {
+        Serial.printf("[ROTA] Periodic: %s\n", msg.c_str());
+        downloadFirmware(firmwareUrl);
+    } else {
+        Serial.printf("[ROTA] Periodic: %s\n", msg.c_str());
+    }
 }
 
 static void handleSetOtaServer() {
