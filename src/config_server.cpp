@@ -174,6 +174,7 @@ h1{font-family:Georgia,serif;font-size:var(--fs-lg);color:var(--gold);text-align
 <button class="b" onclick="ctrl('wake','1')" style="flex:1;min-width:80px">唤醒</button>
 <button class="b r" onclick="ctrl('sleep','1')" style="flex:1;min-width:80px">熄屏</button>
 <button class="b r" onclick="if(confirm('确认重启?'))ctrl('reboot','1')" style="flex:1;min-width:80px">重启</button>
+<button class="b" onclick="location.href='/update'" style="flex:1;min-width:80px">⚡升级</button>
 </div></div>
 
 <div class="sc-span sec"><div class="t">调试信息</div>
