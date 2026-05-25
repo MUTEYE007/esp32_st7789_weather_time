@@ -2,6 +2,8 @@
 #include "weather.h"
 #include "display.h"
 #include "page_manager.h"
+
+volatile int otaProgress = -1; // OTA progress for screen display
 #include <WebServer.h>
 #include <WiFi.h>
 #include <Update.h>
@@ -460,6 +462,9 @@ h1{font-size:var(--fs-lg);color:var(--gold);text-align:center;letter-spacing:2px
 .st{display:none;margin-top:8px;padding:8px;border-radius:var(--r);text-align:center;font-size:var(--fs-s);font-family:'Courier New',monospace}
 .st.ok{display:block;background:#00bfa511;color:var(--teal);border:1px solid #00bfa533}
 .st.er{display:block;background:var(--red)11;color:var(--red);border:1px solid var(--red)33}
+.prow{display:none;margin-top:8px;background:var(--bg2);border-radius:var(--r);overflow:hidden;height:20px;position:relative}
+.pro{height:100%;width:0%;background:linear-gradient(90deg,#00bfa5,#00d9b0);border-radius:var(--r);transition:width .3s}
+.pt{position:absolute;top:0;left:0;right:0;height:20px;line-height:20px;text-align:center;font-size:var(--fs-xs);color:var(--card);font-weight:700;font-family:'Courier New',monospace}
 .back{margin-top:12px;text-align:center}
 .back a{color:var(--mute);font-size:var(--fs-xs);text-decoration:none;letter-spacing:1px}
 .back a:hover{color:var(--teal)}
@@ -480,21 +485,20 @@ h1{font-size:var(--fs-lg);color:var(--gold);text-align:center;letter-spacing:2px
 <div class="note">✓ 采用 A/B 双槽设计，升级失败自动回退</div>
 <div class="note">✓ 当前版本可放心测试</div>
 </div>
-<form id="upForm" method="post" enctype="multipart/form-data" action="/update" onsubmit="return onSubmit()">
 <div class="uparea" id="dropArea">
 <label class="flabel" id="fileLabel" for="fileInput">+ 选择固件文件</label>
 <input type="file" id="fileInput" name="firmware" accept=".bin" onchange="onFilePick()" />
 <div class="fname" id="fileName">未选择文件</div>
 </div>
-<button class="btn" id="upBtn" type="submit" disabled>上传固件</button>
-</form>
+<button class="btn" id="upBtn" onclick="startUpload()" disabled>上传固件</button>
+<div class="prow" id="proW"><div class="pro" id="proB"></div><div class="pt" id="proT">0%</div></div>
 <div id="st" class="st"></div>
 <div class="back"><a href="/">← 返回主页</a></div>
 </div>
 <script>
 var picked=false;
 function onFilePick(){var f=document.getElementById('fileInput');if(f.files.length>0){document.getElementById('fileName').textContent=f.files[0].name;document.getElementById('upBtn').disabled=false;picked=true}}
-function onSubmit(){if(!picked)return false;var f=document.getElementById('fileInput').files[0];if(!f)return false;var btn=document.getElementById('upBtn');btn.disabled=true;btn.textContent='上传中...';document.getElementById('st').className='st ok';document.getElementById('st').textContent='正在写入固件，请勿断电...';var form=document.getElementById('upForm');form.style.display='none';return true}
+function startUpload(){if(!picked)return;var f=document.getElementById('fileInput');if(!f||!f.files||!f.files[0])return;var file=f.files[0];var btn=document.getElementById('upBtn');btn.disabled=true;btn.textContent='上传中...';document.getElementById('dropArea').style.display='none';document.getElementById('upBtn').style.display='none';document.getElementById('proW').style.display='block';var xhr=new XMLHttpRequest();xhr.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);document.getElementById('proB').style.width=p+'%';document.getElementById('proT').textContent=p+'%'}};xhr.onload=function(){document.body.innerHTML=xhr.responseText};xhr.onerror=function(){document.getElementById('st').className='st er';document.getElementById('st').textContent='上传失败'};var fd=new FormData();fd.append('firmware',file);xhr.open('POST','/update?size='+file.size,true);xhr.send(fd)}
 </script></body></html>
 )rawliteral";
 
@@ -506,11 +510,13 @@ static void handleOtaGet() {
 static void handleOtaUpload() {
     HTTPUpload &upload = server.upload();
     static unsigned long totalWritten = 0;
+    static unsigned long totalSize = 0;
 
     if (upload.status == UPLOAD_FILE_START) {
         Serial.printf("[OTA] Start: %s\n", upload.filename.c_str());
         totalWritten = 0;
-        // Use UPDATE_SIZE_UNKNOWN — multipart totalSize is unreliable
+        totalSize = server.arg("size").toInt();
+        otaProgress = 0;
         if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
             Update.printError(Serial);
         }
@@ -520,14 +526,21 @@ static void handleOtaUpload() {
             Update.printError(Serial);
         }
         totalWritten += written;
+        if (totalSize > 0) {
+            otaProgress = (int)(totalWritten * 100 / totalSize);
+            if (otaProgress > 99) otaProgress = 99;
+        }
     } else if (upload.status == UPLOAD_FILE_END) {
         if (Update.end()) {
             Serial.printf("[OTA] Success: %lu bytes\n", totalWritten);
+            otaProgress = 100;
         } else {
             Update.printError(Serial);
+            otaProgress = -1;
         }
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
         Update.abort();
+        otaProgress = -1;
         Serial.println("[OTA] Aborted");
     }
 }
@@ -536,6 +549,7 @@ static void handleOtaPost() {
     if (Update.hasError()) {
         String err = Update.errorString();
         Serial.printf("[OTA] Error: %s\n", err.c_str());
+        otaProgress = -1;
         String page = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/update\"><style>body{background:#1a1a1a;color:#e8c580;font-family:'Courier New',monospace;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:20px}.c{background:#242424;border:1px solid #3a3a3a;border-radius:12px;padding:28px;max-width:480px;text-align:center}h2{color:#e85a4f;margin-bottom:12px}p{color:#8a7a6a;font-size:12px}</style></head><body><div class=\"c\"><h2>❌ 升级失败</h2><p>" + err + "</p><p style=\"margin-top:12px\">5 秒后返回升级页面</p></div></body></html>";
         server.send(200, "text/html; charset=utf-8", page);
     } else {

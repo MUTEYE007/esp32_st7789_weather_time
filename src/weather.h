@@ -109,6 +109,9 @@ extern SemaphoreHandle_t dataMutex;
 extern volatile bool networkBusy;
 extern volatile bool weatherUpdated;
 
+// OTA update progress: -1 = idle, 0-100 = percent.
+extern volatile int otaProgress;
+
 void initWiFiWithProvisioning();
 void loadConfig();
 void saveConfig(const String &apiKey, const String &host);

@@ -553,6 +553,19 @@ void uiTask(void *pvParameters) {
       }
     }
 
+    // OTA progress bar at bottom of screen
+    static int lastOtaPct = -2;
+    if (otaProgress != lastOtaPct) {
+      lastOtaPct = otaProgress;
+      if (otaProgress >= 0 && otaProgress <= 100) {
+        int bw = map(otaProgress, 0, 100, 0, SCREEN_W);
+        fillArea(0, SCREEN_H - 4, SCREEN_W, 4, COLOR_BG);
+        fillArea(0, SCREEN_H - 4, bw, 4, COLOR_GREEN);
+      } else if (otaProgress < 0 && lastOtaPct != -2) {
+        fillArea(0, SCREEN_H - 4, SCREEN_W, 4, 0x08A5);     // clear
+      }
+    }
+
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 }
