@@ -13,10 +13,13 @@ print(f"[BUILD] Generated version.h → FW_VERSION = {date_str}")
 
 # Copy firmware.bin → YYYY-MM-DD_firmware.bin after build
 def _rename_fw(source, target, env):
-    src = source[0].path  # path to the built .bin
+    src = source[0].path
     dst = os.path.join(os.path.dirname(src), f"{date_str}_firmware.bin")
     if os.path.exists(src):
-        shutil.copy2(src, dst)
-        print(f"[BUILD] Firmware → {os.path.basename(dst)}")
+        try:
+            shutil.copy2(src, dst)
+            print(f"[BUILD] Firmware → {os.path.basename(dst)}")
+        except Exception as e:
+            print(f"[BUILD] WARNING: firmware rename failed: {e}")
 
 env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", _rename_fw)

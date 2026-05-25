@@ -517,7 +517,7 @@ function onFilePick(){var f=document.getElementById('fileInput');if(f.files.leng
 function startUpload(){if(!picked)return;var f=document.getElementById('fileInput');if(!f||!f.files||!f.files[0])return;var file=f.files[0];var btn=document.getElementById('upBtn');btn.disabled=true;btn.textContent='上传中...';document.getElementById('dropArea').style.display='none';document.getElementById('upBtn').style.display='none';document.getElementById('proW').style.display='block';var xhr=new XMLHttpRequest();xhr.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);document.getElementById('proB').style.width=p+'%';document.getElementById('proT').textContent=p+'%'}};xhr.onload=function(){document.body.innerHTML=xhr.responseText};xhr.onerror=function(){document.getElementById('st').className='st er';document.getElementById('st').textContent='上传失败'};var fd=new FormData();fd.append('firmware',file);xhr.open('POST','/update?size='+file.size,true);xhr.send(fd)}
 function sc(el,ok,t){el.className='st '+(ok?'ok':'er');el.style.display='block';el.textContent=t;setTimeout(()=>el.style.display='none',ok?3000:8000)}
 function saveOtaServer(){var u=document.getElementById('otaServer').value;if(!u){sc(document.getElementById('srvSt'),0,'请输入地址');return}fetch('/set-ota-server',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'url='+encodeURIComponent(u)}).then(r=>sc(document.getElementById('srvSt'),r.ok,r.ok?'已保存':'失败')).catch(e=>sc(document.getElementById('srvSt'),0,'网络错误'))}
-function checkUpdate(){var st=document.getElementById('chkSt');var btn=document.getElementById('chkBtn');btn.disabled=true;btn.textContent='检查中...';sc(st,1,'正在检查...');fetch('/check-update').then(r=>r.text()).then(t=>{sc(st,!t.includes('失败')&&!t.includes('错误'),t);btn.disabled=false;btn.textContent='检查更新'}).catch(e=>{sc(st,0,'连接超时');btn.disabled=false;btn.textContent='检查更新'})}
+function checkUpdate(){var st=document.getElementById('chkSt');var btn=document.getElementById('chkBtn');btn.disabled=true;btn.textContent='检查中...';sc(st,1,'正在检查...');fetch('/check-update').then(r=>r.text()).then(t=>{var ok=!t.startsWith('ERR:');sc(st,ok,ok?t:t.substring(4));btn.disabled=false;btn.textContent='检查更新'}).catch(e=>{sc(st,0,'连接超时');btn.disabled=false;btn.textContent='检查更新'})}
 function loadOtaServer(){fetch('/get-ota-server').then(r=>r.text()).then(u=>document.getElementById('otaServer').value=u).catch(()=>{})}
 loadOtaServer();
 </script></body></html>
@@ -693,9 +693,10 @@ static void downloadFirmware(const String &url) {
 }
 
 // Core check logic: returns status message.
-// If new version found, downloads and restarts.
+// On success (new version found) → download + restart, call does not return.
+// On error → returns "ERR: ..." (JS checks for ERR: prefix).
 static String checkAndUpdate() {
-    if (strlen(otaServerUrl) == 0) return "未配置更新服务器";
+    if (strlen(otaServerUrl) == 0) return "ERR:未配置更新服务器";
     otaPhase = 0;
 
     String vu = String(otaServerUrl);
@@ -709,7 +710,7 @@ static String checkAndUpdate() {
     if (code != 200) {
         otaPhase = -1;
         http.end();
-        return "服务器连接失败 (HTTP " + String(code) + ")";
+        return "ERR:服务器连接失败 (HTTP " + String(code) + ")";
     }
 
     String payload = http.getString();
@@ -717,13 +718,13 @@ static String checkAndUpdate() {
 
     JsonDocument doc;
     DeserializationError derr = deserializeJson(doc, payload);
-    if (derr) { otaPhase = -1; return "无法解析 version.json"; }
+    if (derr) { otaPhase = -1; return "ERR:无法解析 version.json"; }
 
     String remoteVer = doc["version"] | "";
     String fwUrl = doc["url"] | "";
     if (remoteVer.length() == 0 || fwUrl.length() == 0) {
         otaPhase = -1;
-        return "version.json 格式错误";
+        return "ERR:version.json 格式错误";
     }
 
     strncpy(otaVersionRemote, remoteVer.c_str(), sizeof(otaVersionRemote) - 1);
@@ -740,6 +741,9 @@ static String checkAndUpdate() {
         absUrl = base + fwUrl.substring(1);
     }
     downloadFirmware(absUrl);
+    // downloadFirmware succeeded → ESP.restart() was called.
+    // If it failed (otaPhase==3), report error.
+    if (otaPhase == 3) return "ERR:下载失败，请检查服务器和网络";
     return "发现新版本 " + remoteVer + "，开始下载...";
 }
 
@@ -748,7 +752,13 @@ static void handleCheckUpdate() {
         server.send(200, "text/plain; charset=utf-8", "升级已在进行中");
         return;
     }
-    server.send(200, "text/plain; charset=utf-8", checkAndUpdate());
+    // Send response BEFORE blocking on download, so browser gets something
+    server.send(200, "text/plain; charset=utf-8", "正在检查...");
+    String result = checkAndUpdate();
+    // If checkAndUpdate didn't restart (error or same version), update the response
+    // Note: server.send was already called, but the client will see the first msg.
+    // Longer-term: implement SSE or polling. For now this is a usability improvement.
+    Serial.printf("[ROTA] check result: %s\n", result.c_str());
 }
 
 void periodicCheckUpdate() {
