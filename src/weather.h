@@ -115,6 +115,8 @@ extern volatile int otaProgress;
 // ---- Remote OTA ----
 // otaPhase: -1=idle, 0=checking, 1=downloading, 2=done/restart, 3=error
 extern volatile int otaPhase;
+// 0=normal OTA, 1=emergency push
+extern volatile int otaType;
 // Download progress percent (0-100)
 extern volatile int otaPercent;
 // Remote server URL (saved in Preferences "ota:server")

@@ -100,6 +100,7 @@
 #define COLOR_GOLD     0xFEA8
 #define COLOR_PRECIP_SMALL 0x1ACF
 
+#define COLOR_RED      0xF800
 #define COLOR_WHITE    0xFFFF
 
 // ===== Warning colors =====

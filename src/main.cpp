@@ -193,8 +193,8 @@ void uiTask(void *pvParameters) {
       if (otaPhase != lastPh) {
         lastPh = otaPhase; lastPct = otaPercent;
         fillArea(0, 0, SCREEN_W, SCREEN_H, COLOR_BG);
-        fillArea(0, 0, SCREEN_W, 18, COLOR_ACCENT);
-        drawGB16(8, 1, "固件升级", COLOR_BG, COLOR_ACCENT);
+        fillArea(0, 0, SCREEN_W, 18, otaType ? COLOR_RED : COLOR_ACCENT);
+        drawGB16(8, 1, otaType ? "紧急固件" : "固件升级", COLOR_BG, otaType ? COLOR_RED : COLOR_ACCENT);
 
         const char *msg = "";
         switch (otaPhase) {

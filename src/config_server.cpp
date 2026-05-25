@@ -5,6 +5,7 @@
 
 volatile int otaProgress = -1; // OTA upload progress
 volatile int otaPhase = -1;    // Remote OTA state machine
+volatile int otaType = 0;      // 0=normal, 1=emergency
 volatile int otaPercent = 0;   // Remote OTA download %
 char otaServerUrl[256] = "";   // Remote OTA server
 char otaVersionRemote[32] = "";// Remote version for display
@@ -747,6 +748,7 @@ static void handleCheckUpdate() {
     if (firmwareUrl.length() > 0) {
         // New version found → send response to browser, THEN block on download
         server.send(200, "text/plain; charset=utf-8", msg);
+        otaType = 0;
         downloadFirmware(firmwareUrl);
         // If download failed (otaPhase==3), we're back here but can't send another response
         Serial.printf("[ROTA] Download failed after response sent, phase=%d\n", otaPhase);
@@ -767,6 +769,7 @@ void periodicCheckUpdate() {
 
     if (firmwareUrl.length() > 0) {
         Serial.printf("[ROTA] Periodic: %s\n", msg.c_str());
+        otaType = 0;
         downloadFirmware(firmwareUrl);
     } else {
         Serial.printf("[ROTA] Periodic: %s\n", msg.c_str());
@@ -792,6 +795,7 @@ void emergencyCheckUpdate() {
 
     Serial.println("[EMRG] emergency.bin found, force-updating...");
     http.end();
+    otaType = 1;
     downloadFirmware(url);
 }
 
