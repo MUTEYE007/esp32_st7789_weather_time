@@ -76,10 +76,6 @@ void updateStatusTime() {
     if (!state.timeSynced) return;
 
     int nameEndX = PAD_LEFT + textWidth16(weatherName.c_str());
-    int wifiStartX = SCREEN_W - PAD_RIGHT - 20;
-
-    // Clear the space between city name and WiFi bars
-    fillArea(nameEndX, STATUS_Y, wifiStartX - nameEndX, STATUS_H, COLOR_BG);
 
     tft->setTextSize(1);
     tft->setTextColor(COLOR_MUTED, COLOR_BG);
