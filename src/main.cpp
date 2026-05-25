@@ -573,9 +573,10 @@ void uiTask(void *pvParameters) {
     if (otaPhase >= 0) {
       static int lastPh = -2, lastPct = -1;
       static unsigned long errStart = 0;
-      if (otaPhase != lastPh || otaPercent != lastPct) {
+
+      // Phase change → full redraw
+      if (otaPhase != lastPh) {
         lastPh = otaPhase; lastPct = otaPercent;
-        // Full clear
         fillArea(0, 0, SCREEN_W, SCREEN_H, COLOR_BG);
         fillArea(0, 0, SCREEN_W, 18, COLOR_ACCENT);
         drawGB16(8, 1, "固件升级", COLOR_BG, COLOR_ACCENT);
@@ -590,11 +591,10 @@ void uiTask(void *pvParameters) {
         drawGB16(8, 36, msg, COLOR_PRIMARY, COLOR_BG);
 
         if (otaPhase == 1) {
-          int fw = map(otaPercent, 0, 100, 0, SCREEN_W - 40);
-          fillArea(20, 60, SCREEN_W - 40, 14, COLOR_BG_ALT);
-          fillArea(20, 60, fw, 14, COLOR_GREEN);
-          char buf[8]; sprintf(buf, "%d%%", otaPercent);
-          drawGB16((SCREEN_W - (int)strlen(buf) * 16) / 2, 62, buf, COLOR_BG, COLOR_GREEN);
+          fillArea(20, 60, SCREEN_W - 40, 14, COLOR_BG_ALT);  // bar bg
+          fillArea(20, 60, 0, 14, COLOR_GREEN);               // bar fill (0%)
+          char buf[8]; sprintf(buf, "%d%%", 0);
+          drawGB16((SCREEN_W - strlen(buf) * 16) / 2, 78, buf, COLOR_PRIMARY, COLOR_BG);
         }
         if (otaPhase == 3) {
           drawGB16(8, 56, "请检查服务器地址和网络", COLOR_MUTED, COLOR_BG);
@@ -604,6 +604,21 @@ void uiTask(void *pvParameters) {
           drawGB16(8, 56, "设备即将重启...", COLOR_MUTED, COLOR_BG);
         }
       }
+
+      // Download progress — only update bar width + percentage, no full clear
+      if (otaPhase == 1 && otaPercent != lastPct) {
+        lastPct = otaPercent;
+        // Re-draw bar background (covers old fill)
+        fillArea(20, 60, SCREEN_W - 40, 14, COLOR_BG_ALT);
+        // Draw current fill
+        int fw = map(otaPercent, 0, 100, 0, SCREEN_W - 40);
+        fillArea(20, 60, fw, 14, COLOR_GREEN);
+        // Update percentage below bar (clear old + write new)
+        fillArea(20, 76, SCREEN_W - 40, 18, COLOR_BG);
+        char buf[8]; sprintf(buf, "%d%%", otaPercent);
+        drawGB16((SCREEN_W - strlen(buf) * 16) / 2, 78, buf, COLOR_PRIMARY, COLOR_BG);
+      }
+
       // Auto-clear error after 5s
       if (otaPhase == 3 && millis() - errStart > 5000) {
         otaPhase = -1;
