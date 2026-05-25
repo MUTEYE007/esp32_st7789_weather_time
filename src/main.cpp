@@ -509,7 +509,7 @@ void uiTask(void *pvParameters) {
       main_page::updateClockTime(curHour, curMin, curSec);
     }
 
-    // Flash status bar gap (between W/A text and WiFi) when warnings active
+    // Flash status bar inset block (between W/A text and WiFi) when warnings active
     static unsigned long lastWarnFlash = 0;
     static bool warnFlashOn = false;
     uint16_t warnColor = getWarningSeverityColor();
@@ -518,11 +518,13 @@ void uiTask(void *pvParameters) {
       // textSize=1: " 14:30 W15:00 A15:10" ≈ 20 chars × ~6px
       int textEndX = nameEndX + 20 * 6;
       int wifiStartX = SCREEN_W - PAD_RIGHT - 20;
-      int flashW = wifiStartX - textEndX;
+      static const int FLASH_MARGIN = 6; // px inset on each side
+      int flashX = textEndX + FLASH_MARGIN;
+      int flashW = (wifiStartX - textEndX) - FLASH_MARGIN * 2;
       if (flashW > 0 && (now - lastWarnFlash >= 500)) {
         lastWarnFlash = now;
         warnFlashOn = !warnFlashOn;
-        fillArea(textEndX, STATUS_Y, flashW, STATUS_H,
+        fillArea(flashX, STATUS_Y, flashW, STATUS_H,
                  warnFlashOn ? warnColor : COLOR_BG);
       }
     } else if (warnFlashOn) {
@@ -530,9 +532,11 @@ void uiTask(void *pvParameters) {
       int nameEndX = PAD_LEFT + textWidth16(weatherName.c_str());
       int textEndX = nameEndX + 20 * 6;
       int wifiStartX = SCREEN_W - PAD_RIGHT - 20;
-      int flashW = wifiStartX - textEndX;
+      static const int FLASH_MARGIN = 6;
+      int flashX = textEndX + FLASH_MARGIN;
+      int flashW = (wifiStartX - textEndX) - FLASH_MARGIN * 2;
       if (flashW > 0) {
-        fillArea(textEndX, STATUS_Y, flashW, STATUS_H, COLOR_BG);
+        fillArea(flashX, STATUS_Y, flashW, STATUS_H, COLOR_BG);
       }
     }
 
